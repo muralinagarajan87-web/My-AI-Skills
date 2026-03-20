@@ -48,7 +48,10 @@ export const testCaseAPI = {
   get: (id) => api.get(`/test-cases/${id}`),
   update: (id, data) => api.put(`/test-cases/${id}`, data),
   delete: (id) => api.delete(`/test-cases/${id}`),
-  clone: (id) => api.post(`/test-cases/${id}/clone`)
+  clone: (id) => api.post(`/test-cases/${id}/clone`),
+  bulkDelete: (ids) => api.post('/test-cases/bulk-delete', { ids }),
+  bulkUpdate: (ids, updates) => api.put('/test-cases/bulk', { ids, updates }),
+  bulkMove: (ids, target_workspace_id) => api.put('/test-cases/bulk/move', { ids, target_workspace_id }),
 };
 
 // Test Run APIs
