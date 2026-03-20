@@ -119,8 +119,13 @@ const updateUser = async (req, res) => {
 
     const { id } = req.params;
     const { name, role } = req.body;
-    const result = await pool.query('UPDATE users SET name = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING id, email, name, role', [name, role, id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const workspaceId = req.user.workspace_id;
+    // FIX BUG-13: scope update to current workspace so admins can't edit users from other workspaces
+    const result = await pool.query(
+      'UPDATE users SET name = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND workspace_id = $4 RETURNING id, email, name, role',
+      [name, role, id, workspaceId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found in current workspace' });
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -158,7 +163,7 @@ const getGroups = async (req, res) => {
 
 const getRoles = async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, description FROM roles ORDER BY id');
+    const result = await pool.query('SELECT id, name, description, is_system, is_default FROM roles ORDER BY id');
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -208,6 +213,9 @@ const deleteRole = async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
     const { id } = req.params;
+    const check = await pool.query('SELECT is_system FROM roles WHERE id = $1', [id]);
+    if (check.rows.length === 0) return res.status(404).json({ error: 'Role not found' });
+    if (check.rows[0].is_system) return res.status(400).json({ error: 'System roles cannot be deleted' });
     await pool.query('DELETE FROM roles WHERE id = $1', [id]);
     res.json({ message: 'Role deleted' });
   } catch (error) {
@@ -279,7 +287,8 @@ const importUsersCSV = async (req, res) => {
     const header = lines.shift().split(',').map(h => h.trim().replace(/(^")|("$)/g,''));
     let created = 0;
     for (const line of lines) {
-      const cols = line.match(/(?:"([^"]*)")|([^,]+)/g).map(s => s.replace(/^"|"$/g, ''));
+      // FIX BUG-09: guard against null match (empty/all-comma lines)
+      const cols = (line.match(/(?:"([^"]*)")|([^,]+)/g) || []).map(s => s.replace(/^"|"$/g, ''));
       const obj = {};
       header.forEach((h, i) => obj[h] = cols[i] || '');
       // create user if not exists
@@ -303,7 +312,8 @@ const importGroupsCSV = async (req, res) => {
     const header = lines.shift().split(',').map(h => h.trim().replace(/(^")|("$)/g,''));
     let created = 0;
     for (const line of lines) {
-      const cols = line.match(/(?:"([^"]*)")|([^,]+)/g).map(s => s.replace(/^"|"$/g, ''));
+      // FIX BUG-09: guard against null match (empty/all-comma lines)
+      const cols = (line.match(/(?:"([^"]*)")|([^,]+)/g) || []).map(s => s.replace(/^"|"$/g, ''));
       const obj = {};
       header.forEach((h, i) => obj[h] = cols[i] || '');
       const exists = await pool.query('SELECT id FROM groups WHERE workspace_id = $1 AND name = $2', [req.user.workspace_id, obj.name]);
@@ -325,7 +335,8 @@ const importRolesCSV = async (req, res) => {
     const header = lines.shift().split(',').map(h => h.trim().replace(/(^")|("$)/g,''));
     let created = 0;
     for (const line of lines) {
-      const cols = line.match(/(?:"([^"]*)")|([^,]+)/g).map(s => s.replace(/^"|"$/g, ''));
+      // FIX BUG-09: guard against null match (empty/all-comma lines)
+      const cols = (line.match(/(?:"([^"]*)")|([^,]+)/g) || []).map(s => s.replace(/^"|"$/g, ''));
       const obj = {};
       header.forEach((h, i) => obj[h] = cols[i] || '');
       const exists = await pool.query('SELECT id FROM roles WHERE name = $1', [obj.name]);

@@ -70,7 +70,9 @@ export const reportAPI = {
   getMetrics: (runId) => api.get('/reports/metrics', { params: runId ? { run_id: runId } : {} }),
   getAuditLog: () => api.get('/reports/audit-log'),
   getHistory: (testCaseId) => api.get(`/reports/history/${testCaseId}`),
-  getTestCaseResults: (testCaseId) => api.get(`/reports/results/${testCaseId}`)
+  getTestCaseResults: (testCaseId) => api.get(`/reports/results/${testCaseId}`),
+  getDashboard: () => api.get('/reports/dashboard'),
+  getAutomation: () => api.get('/reports/automation'),
 };
 
 // Upload APIs

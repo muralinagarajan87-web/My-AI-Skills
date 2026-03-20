@@ -192,45 +192,48 @@ router.post('/import', authenticateToken, async (req, res) => {
     }
 
     const inserted = [];
-    for (const row of rows) {
-      const title = getMapped(row, mapping.title, '').trim();
-      if (!title) continue; // skip rows without a title
+    try {
+      for (const row of rows) {
+        const title = getMapped(row, mapping.title, '').trim();
+        if (!title) continue; // skip rows without a title
 
-      const fieldVals = {};
-      ['section', 'type', 'assigned_to', 'estimate', 'automation_type',
-       'is_automated', 'automation_candidate', 'references', 'preconditions'].forEach(f => {
-        if (mapping[f]) fieldVals[f] = getMapped(row, mapping[f]);
-      });
+        const fieldVals = {};
+        ['section', 'type', 'assigned_to', 'estimate', 'automation_type',
+         'is_automated', 'automation_candidate', 'references', 'preconditions'].forEach(f => {
+          if (mapping[f]) fieldVals[f] = getMapped(row, mapping[f]);
+        });
 
-      const result = await pool.query(
-        `INSERT INTO test_cases (workspace_id, template_id, title, description, steps, expected_result, priority, status, field_values, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [
-          workspaceId,
-          template_id || null,
-          title,
-          getMapped(row, mapping.description),
-          JSON.stringify(normalizeSteps(getMapped(row, mapping.steps))),
-          getMapped(row, mapping.expected_result),
-          getMapped(row, mapping.priority, 'Medium'),
-          getMapped(row, mapping.status, 'Draft'),
-          JSON.stringify(fieldVals),
-          userId
-        ]
-      );
-      inserted.push(result.rows[0]);
+        const result = await pool.query(
+          `INSERT INTO test_cases (workspace_id, template_id, title, description, steps, expected_result, priority, status, field_values, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          [
+            workspaceId,
+            template_id || null,
+            title,
+            getMapped(row, mapping.description),
+            JSON.stringify(normalizeSteps(getMapped(row, mapping.steps))),
+            getMapped(row, mapping.expected_result),
+            getMapped(row, mapping.priority, 'Medium'),
+            getMapped(row, mapping.status, 'Draft'),
+            JSON.stringify(fieldVals),
+            userId
+          ]
+        );
+        inserted.push(result.rows[0]);
 
-      // Version history
-      await pool.query(
-        `INSERT INTO test_case_versions (test_case_id, version_number, title, description, steps, expected_result, priority, changed_by, change_reason)
-         VALUES ($1,1,$2,$3,$4,$5,$6,$7,'Imported from file')`,
-        [result.rows[0].id, title, getMapped(row, mapping.description),
-         JSON.stringify(normalizeSteps(getMapped(row, mapping.steps))),
-         getMapped(row, mapping.expected_result), getMapped(row, mapping.priority, 'Medium'), userId]
-      );
+        // Version history
+        await pool.query(
+          `INSERT INTO test_case_versions (test_case_id, version_number, title, description, steps, expected_result, priority, changed_by, change_reason)
+           VALUES ($1,1,$2,$3,$4,$5,$6,$7,'Imported from file')`,
+          [result.rows[0].id, title, getMapped(row, mapping.description),
+           JSON.stringify(normalizeSteps(getMapped(row, mapping.steps))),
+           getMapped(row, mapping.expected_result), getMapped(row, mapping.priority, 'Medium'), userId]
+        );
+      }
+    } finally {
+      // FIX BUG-10: always delete temp file even on DB error
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
-
-    fs.unlinkSync(filePath);
 
     res.json({ message: `${inserted.length} test cases imported successfully`, imported: inserted.length });
   } catch (error) {
@@ -292,11 +295,16 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req, res
             [templateId || null, tc.title, tc.description, JSON.stringify(tc.steps), tc.expected_result, tc.priority, tc.id, workspaceId]
           );
 
-          // Save version history
+          // FIX BUG-14: use max_version + 1 instead of hardcoded 1 to avoid duplicate version entries
+          const versionResult = await pool.query(
+            'SELECT COALESCE(MAX(version_number), 0) + 1 as next_version FROM test_case_versions WHERE test_case_id = $1',
+            [tc.id]
+          );
+          const nextVersion = versionResult.rows[0].next_version;
           await pool.query(
             `INSERT INTO test_case_versions (test_case_id, version_number, title, description, steps, expected_result, priority, changed_by, change_reason)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [tc.id, 1, tc.title, tc.description, JSON.stringify(tc.steps), tc.expected_result, tc.priority, userId, 'Imported update']
+            [tc.id, nextVersion, tc.title, tc.description, JSON.stringify(tc.steps), tc.expected_result, tc.priority, userId, 'Imported update']
           );
 
           return result.rows[0];

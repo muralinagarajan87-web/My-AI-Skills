@@ -96,11 +96,18 @@ const updateTestCase = async (req, res) => {
     const nextVersion = (versionResult.rows[0].max_version || 0) + 1;
 
     // Update test case
+    // FIX BUG-11: include status in update so users can change test case status via edit dialog
+    const { status } = req.body;
     const result = await pool.query(
-      `UPDATE test_cases SET title = $1, description = $2, steps = $3, expected_result = $4, priority = $5, field_values = $6, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7 AND workspace_id = $8 RETURNING *`,
-      [title, description, JSON.stringify(steps), expected_result, priority, JSON.stringify(field_values || {}), id, workspaceId]
+      `UPDATE test_cases SET title = $1, description = $2, steps = $3, expected_result = $4, priority = $5, field_values = $6,
+       status = COALESCE($7, status), updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8 AND workspace_id = $9 RETURNING *`,
+      [title, description, JSON.stringify(steps), expected_result, priority, JSON.stringify(field_values || {}), status || null, id, workspaceId]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Test case not found or not in current workspace' });
+    }
 
     // Create new version
     await pool.query(
@@ -139,10 +146,15 @@ const deleteTestCase = async (req, res) => {
     // Delete dependents first, then the test case
     await pool.query('DELETE FROM test_results WHERE test_case_id = $1', [id]);
     await pool.query('DELETE FROM test_case_versions WHERE test_case_id = $1', [id]);
-    await pool.query(
-      'DELETE FROM test_cases WHERE id = $1 AND workspace_id = $2',
+    const deleteResult = await pool.query(
+      'DELETE FROM test_cases WHERE id = $1 AND workspace_id = $2 RETURNING id',
       [id, workspaceId]
     );
+
+    // FIX BUG-05: return 404 when nothing was actually deleted
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Test case not found in current workspace' });
+    }
 
     res.json({ message: 'Test case deleted' });
   } catch (error) {
@@ -168,14 +180,26 @@ const cloneTestCase = async (req, res) => {
 
     const tc = original.rows[0];
 
-    // Create clone
-    const result = await pool.query(
+    // FIX BUG-03 & BUG-04: use JSON.stringify for JSONB columns; add version history entry
+    const cloneResult = await pool.query(
       `INSERT INTO test_cases (workspace_id, template_id, title, description, steps, expected_result, priority, field_values, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [workspaceId, tc.template_id, `${tc.title} (Copy)`, tc.description, tc.steps, tc.expected_result, tc.priority, tc.field_values || {}, userId]
+      [workspaceId, tc.template_id, `${tc.title} (Copy)`, tc.description,
+       JSON.stringify(tc.steps), tc.expected_result, tc.priority,
+       JSON.stringify(tc.field_values || {}), userId]
     );
 
-    res.status(201).json({ message: 'Test case cloned', testCase: result.rows[0] });
+    const cloned = cloneResult.rows[0];
+
+    // Create version 1 for the clone
+    await pool.query(
+      `INSERT INTO test_case_versions (test_case_id, version_number, title, description, steps, expected_result, priority, field_values, changed_by, change_reason)
+       VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, 'Cloned from TC-' || $9)`,
+      [cloned.id, cloned.title, cloned.description, JSON.stringify(tc.steps),
+       cloned.expected_result, cloned.priority, JSON.stringify(tc.field_values || {}), userId, tc.id]
+    );
+
+    res.status(201).json({ message: 'Test case cloned', testCase: cloned });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -195,11 +219,20 @@ const bulkDeleteTestCases = async (req, res) => {
 
     await client.query('BEGIN');
 
-    const idPlaceholders = ids.map((_, i) => `$${i + 1}`).join(',');
+    // FIX BUG-02: scope dependent deletes to workspace to prevent cross-workspace data deletion
+    const idPlaceholders = ids.map((_, i) => `$${i + 2}`).join(',');
+    const safeIds = [workspaceId, ...ids];
 
-    // Delete dependent records first
-    await client.query(`DELETE FROM test_results WHERE test_case_id IN (${idPlaceholders})`, ids);
-    await client.query(`DELETE FROM test_case_versions WHERE test_case_id IN (${idPlaceholders})`, ids);
+    await client.query(
+      `DELETE FROM test_results WHERE test_case_id IN (
+         SELECT id FROM test_cases WHERE workspace_id = $1 AND id IN (${idPlaceholders})
+       )`, safeIds
+    );
+    await client.query(
+      `DELETE FROM test_case_versions WHERE test_case_id IN (
+         SELECT id FROM test_cases WHERE workspace_id = $1 AND id IN (${idPlaceholders})
+       )`, safeIds
+    );
 
     // Now delete the test cases (scoped to workspace)
     const result = await client.query(

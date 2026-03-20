@@ -116,11 +116,12 @@ const updateTestResult = async (req, res) => {
     const userId = req.user.id;
     const workspaceId = req.user.workspace_id;
 
+    // FIX BUG-01: status = execution state ('Completed'), result = outcome ('Pass'/'Fail'/'Skip')
     const result = await pool.query(
       `UPDATE test_results
-       SET status = $1, result = $2, comments = $3, assigned_to = $4, executed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5 RETURNING *`,
-      [result_status, result_status, comments, assigned_to, id]
+       SET status = 'Completed', result = $1, comments = $2, assigned_to = $3, executed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4 RETURNING *`,
+      [result_status, comments, assigned_to, id]
     );
 
     if (result.rows.length === 0) {

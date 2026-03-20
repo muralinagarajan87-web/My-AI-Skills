@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Container, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tabs, Tab, Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel } from '@mui/material';
+import { useState, useEffect, useRef } from 'react';
+import { Box, Container, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tabs, Tab, Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel, Chip, Tooltip } from '@mui/material';
 import { userAPI } from '../services/api';
 
 function UsersTab({ onOpenEdit }) {
   const [users, setUsers] = useState([]);
-  const fileInputRef = React.createRef();
+  const fileInputRef = useRef(null);
   useEffect(() => { load(); }, []);
   const load = async () => { try { const r = await userAPI.getAll(); setUsers(r.data); } catch(e){console.error(e)} };
   return (
@@ -71,7 +71,7 @@ function UsersTab({ onOpenEdit }) {
 
 function GroupsTab() {
   const [groups, setGroups] = useState([]);
-  const groupFileRef = React.createRef();
+  const groupFileRef = useRef(null);
   useEffect(() => { load(); }, []);
   const load = async () => { try { const r = await userAPI.getGroups(); setGroups(r.data); } catch(e){console.error(e)} };
   return (
@@ -139,17 +139,42 @@ function RolesTab() {
           <Button variant="contained" onClick={() => openEditRole(null)}>+ Add Role</Button>
         </Box>
       </Box>
-      <Paper sx={{ p: 2 }}>
-        {roles.length === 0 ? <Typography sx={{ color: 'text.secondary' }}>No roles defined.</Typography> : (
-          roles.map(r => (
-            <Box key={r.id} sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box>
-                <Typography sx={{ fontWeight: 'bold' }}>{r.name}</Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{r.description}</Typography>
+      <Paper sx={{ p: 0, overflow: 'hidden' }}>
+        {roles.length === 0 ? (
+          <Typography sx={{ color: 'text.secondary', p: 2 }}>No roles defined.</Typography>
+        ) : (
+          roles.map((r, idx) => (
+            <Box key={r.id} sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              px: 2.5, py: 1.75,
+              borderBottom: idx < roles.length - 1 ? '1px solid' : 'none',
+              borderColor: 'divider',
+              backgroundColor: r.is_default ? 'rgba(34,80,56,0.04)' : 'transparent',
+              '&:hover': { backgroundColor: r.is_default ? 'rgba(34,80,56,0.08)' : 'action.hover' },
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>{r.name}</Typography>
+                    {r.is_default && (
+                      <Chip label="Default" size="small" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700, bgcolor: '#225038', color: '#fff', borderRadius: 1 }} />
+                    )}
+                    {r.is_system && (
+                      <Chip label="System" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', borderColor: 'text.disabled', color: 'text.secondary', borderRadius: 1 }} />
+                    )}
+                  </Box>
+                  {r.description && (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>{r.description}</Typography>
+                  )}
+                </Box>
               </Box>
-              <Box>
-                <Button size="small" onClick={() => openEditRole(r)} sx={{ mr: 1 }}>Edit</Button>
-                <Button size="small" color="error" onClick={() => removeRole(r.id)}>Delete</Button>
+              <Box sx={{ display: 'flex', gap: 1, ml: 2, flexShrink: 0 }}>
+                <Button size="small" variant="outlined" onClick={() => openEditRole(r)} disabled={r.is_system}>Edit</Button>
+                <Tooltip title={r.is_system ? 'System roles cannot be deleted' : ''} arrow>
+                  <span>
+                    <Button size="small" color="error" variant="outlined" onClick={() => removeRole(r.id)} disabled={r.is_system}>Delete</Button>
+                  </span>
+                </Tooltip>
               </Box>
             </Box>
           ))

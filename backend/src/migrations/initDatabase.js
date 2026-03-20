@@ -132,6 +132,8 @@ const createTables = async () => {
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) UNIQUE NOT NULL,
         description TEXT,
+        is_system BOOLEAN DEFAULT FALSE,
+        is_default BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -195,6 +197,31 @@ const createTables = async () => {
 
     // Add milestone_id to test_runs (safe, idempotent)
     await pool.query("ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS milestone_id INTEGER REFERENCES milestones(id) ON DELETE SET NULL;");
+
+    // Ensure is_system / is_default columns exist on roles (idempotent)
+    await pool.query("ALTER TABLE roles ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE;");
+    await pool.query("ALTER TABLE roles ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE;");
+
+    // Seed predefined system roles (INSERT … ON CONFLICT DO NOTHING keeps it idempotent)
+    const systemRoles = [
+      { name: 'No Access',   description: 'No access to any workspace resources.',           is_default: false },
+      { name: 'Read-only',   description: 'Can view test cases, runs, and reports only.',    is_default: false },
+      { name: 'Tester',      description: 'Can create and execute test cases and runs.',     is_default: false },
+      { name: 'Designer',    description: 'Can design templates and manage test cases.',     is_default: false },
+      { name: 'Lead',        description: 'Full access excluding user/role management. Default role for new members.', is_default: true },
+      { name: 'Site Admin',  description: 'Unrestricted access to all workspace settings and users.', is_default: false },
+    ];
+    for (const role of systemRoles) {
+      await pool.query(
+        `INSERT INTO roles (name, description, is_system, is_default)
+         VALUES ($1, $2, TRUE, $3)
+         ON CONFLICT (name) DO UPDATE
+           SET description = EXCLUDED.description,
+               is_system   = TRUE,
+               is_default  = EXCLUDED.is_default`,
+        [role.name, role.description, role.is_default]
+      );
+    }
 
     console.log('✓ All tables created successfully');
   } catch (error) {

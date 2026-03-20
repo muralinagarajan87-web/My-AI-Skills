@@ -15,10 +15,13 @@ router.put('/:id/milestone', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { milestone_id } = req.body;
     const pool = require('../config/database');
+    const workspaceId = req.user.workspace_id;
+    // FIX BUG-07: add workspace_id guard so users can only update their own test runs
     const result = await pool.query(
-      'UPDATE test_runs SET milestone_id=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 RETURNING *',
-      [milestone_id, id]
+      'UPDATE test_runs SET milestone_id=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 AND workspace_id=$3 RETURNING *',
+      [milestone_id, id, workspaceId]
     );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Test run not found' });
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });

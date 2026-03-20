@@ -94,7 +94,9 @@ const deleteMilestone = async (req, res) => {
   try {
     const { id } = req.params;
     const workspaceId = req.user.workspace_id;
-    await pool.query('DELETE FROM milestones WHERE id=$1 AND workspace_id=$2', [id, workspaceId]);
+    // FIX BUG-06: return 404 when nothing was deleted
+    const result = await pool.query('DELETE FROM milestones WHERE id=$1 AND workspace_id=$2 RETURNING id', [id, workspaceId]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Milestone not found' });
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

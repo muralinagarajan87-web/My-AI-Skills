@@ -5,7 +5,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, FormLabel, Select, MenuItem, Checkbox, FormControlLabel,
   FormGroup, RadioGroup, Radio, Grid, InputLabel, IconButton, Divider,
-  Chip, Tooltip, InputAdornment, Collapse, Alert, Snackbar, TablePagination
+  Chip, Tooltip, InputAdornment, Alert, Snackbar, TablePagination
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -16,6 +16,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import ClearIcon from '@mui/icons-material/Clear';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import { testCaseAPI, templateAPI, workspaceAPI, reportAPI } from '../services/api';
 import UploadMappingDialog from '../components/UploadMappingDialog';
 
@@ -23,6 +24,7 @@ export default function TestCasesPage() {
   const [testCases, setTestCases] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
+  const [autoStats, setAutoStats] = useState({ total: 0, automated: 0, pending: 0, pct: 0 });
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -47,10 +49,18 @@ export default function TestCasesPage() {
   const [fieldValues, setFieldValues] = useState({});
   const currentWorkspaceId = JSON.parse(localStorage.getItem('user') || '{}').workspace_id;
 
+  const loadAutoStats = async () => {
+    try {
+      const r = await reportAPI.getAutomation();
+      setAutoStats(r.data);
+    } catch (e) { console.error('Error loading automation stats:', e); }
+  };
+
   useEffect(() => {
     loadWorkspaces();
     loadTestCases();
     loadTemplates();
+    loadAutoStats();
   }, []);
 
   const loadWorkspaces = async () => {
@@ -115,6 +125,23 @@ export default function TestCasesPage() {
   // ── Pagination ─────────────────────────────────────────────────────────────
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  // ── Resizable columns ──────────────────────────────────────────────────────
+  const [colWidths, setColWidths] = useState({ id: 96, title: 480, template: 150, priority: 110, status: 110, actions: 165 });
+  const startResize = (col, e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = colWidths[col];
+    const onMove = (me) => {
+      setColWidths(prev => ({ ...prev, [col]: Math.max(60, startW + me.clientX - startX) }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const handleOpenDialog = (testCase = null) => {
     if (testCase) {
@@ -386,6 +413,7 @@ export default function TestCasesPage() {
 
       handleCloseDialog();
       loadTestCases();
+      loadAutoStats();
     } catch (error) {
       console.error('Error saving test case:', error);
     } finally {
@@ -503,6 +531,25 @@ export default function TestCasesPage() {
     } catch (e) { showSnack('Move failed', 'error'); }
   };
 
+  const handleToggleAutomation = async (tc) => {
+    const current = tc.field_values?.is_automated === true || tc.field_values?.is_automated === 'true';
+    try {
+      await testCaseAPI.update(tc.id, {
+        title: tc.title,
+        description: tc.description,
+        steps: tc.steps,
+        expected_result: tc.expected_result,
+        priority: tc.priority,
+        field_values: { ...(tc.field_values || {}), is_automated: !current },
+      });
+      loadTestCases();
+      loadAutoStats();
+      showSnack(`TC-${tc.id} marked as ${!current ? 'Automated' : 'Manual'}`);
+    } catch (e) {
+      showSnack('Update failed', 'error');
+    }
+  };
+
   const PRIORITY_COLORS = {
     Critical: { bg: '#fee2e2', color: '#dc2626' },
     P0:       { bg: '#fee2e2', color: '#dc2626' },
@@ -536,6 +583,43 @@ export default function TestCasesPage() {
               {testCases.length} total · {filteredCases.length} shown
             </Typography>
           </Box>
+          {/* ── Automation stats strip ── */}
+          {(() => {
+            const autoCount = autoStats.automated;
+            const pendingCount = autoStats.pending;
+            const autoPct = autoStats.pct;
+            return autoStats.total > 0 ? (
+              <Box sx={{ mt: 2.5, pt: 2, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                  <SmartToyOutlinedIcon sx={{ fontSize: 15, color: 'rgba(255,255,255,0.6)' }} />
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                    Automation Coverage
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, ml: 'auto' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#4ade80' }} />
+                      <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'white' }}>{autoCount} Automated</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.3)' }} />
+                      <Typography sx={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{pendingCount} Pending</Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: 12, fontWeight: 800, color: autoPct >= 70 ? '#4ade80' : autoPct >= 40 ? '#fbbf24' : '#f87171' }}>
+                      {autoPct}%
+                    </Typography>
+                  </Box>
+                </Box>
+                {/* Progress bar */}
+                <Box sx={{ display: 'flex', height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+                  <Box sx={{
+                    width: `${autoPct}%`,
+                    background: 'linear-gradient(90deg, #4ade80, #22c55e)',
+                    borderRadius: 3, transition: 'width 0.6s ease',
+                  }} />
+                </Box>
+              </Box>
+            ) : null;
+          })()}
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Project selector */}
             <FormControl size="small">
@@ -569,138 +653,257 @@ export default function TestCasesPage() {
 
       <Container maxWidth="xl" sx={{ py: 3 }}>
 
-        {/* ── SEARCH + FILTER BAR ─────────────────────────────────────────── */}
-        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '14px', mb: 2 }}>
-          <Box sx={{ px: 2, py: 1.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* ── UNIFIED SINGLE-ROW TOOLBAR ──────────────────────────────────── */}
+        <Paper elevation={0} sx={{
+          border: someSelected ? '1.5px solid #4ade80' : '1px solid #e2e8f0',
+          borderRadius: '14px', mb: 2,
+          background: someSelected
+            ? 'linear-gradient(90deg, #f0fdf4 0%, #fafffe 100%)'
+            : 'linear-gradient(90deg, #f8fffe 0%, #ffffff 100%)',
+          transition: 'all 0.2s ease',
+          overflow: 'hidden',
+        }}>
+          <Box sx={{ px: 2, py: 1.4, display: 'flex', gap: 1, alignItems: 'center' }}>
+
+            {/* ── SEARCH ── */}
             <TextField
               placeholder="Search test cases…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               size="small"
-              sx={{ width: 220,
-                '& .MuiOutlinedInput-root': { borderRadius: '9px', fontSize: 13, bgcolor: '#f8fafc',
+              sx={{ width: 195, flexShrink: 0,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '9px', fontSize: 13,
+                  bgcolor: searchQuery ? 'rgba(34,80,56,0.06)' : '#f1f5f9',
+                  '& fieldset': { borderColor: searchQuery ? '#225038' : '#e2e8f0', borderWidth: searchQuery ? 1.5 : 1 },
                   '&:hover fieldset': { borderColor: '#225038' },
-                  '&.Mui-focused fieldset': { borderColor: '#225038' } }
+                  '&.Mui-focused fieldset': { borderColor: '#225038', borderWidth: 2 },
+                }
               }}
               InputProps={{
-                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: 'text.disabled' }} /></InputAdornment>,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 15, color: searchQuery ? '#225038' : '#94a3b8' }} />
+                  </InputAdornment>
+                ),
                 endAdornment: searchQuery ? (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchQuery('')}><ClearIcon sx={{ fontSize: 14 }} /></IconButton>
+                    <IconButton size="small" onClick={() => setSearchQuery('')}><ClearIcon sx={{ fontSize: 13 }} /></IconButton>
                   </InputAdornment>
                 ) : null
               }}
             />
 
-            <Divider orientation="vertical" flexItem />
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: '#e2e8f0' }} />
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            {/* ── PRIORITY FILTER ── */}
+            <FormControl size="small" sx={{ minWidth: 105, flexShrink: 0 }}>
               <Select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} displayEmpty
-                sx={{ borderRadius: '9px', fontSize: 13, bgcolor: filterPriority ? '#f0fdf4' : 'transparent',
-                  '& fieldset': { borderColor: filterPriority ? '#86efac' : undefined } }}>
-                <MenuItem value="" sx={{ fontSize: 13 }}>Priority</MenuItem>
+                sx={{
+                  borderRadius: '9px', fontSize: 13,
+                  bgcolor: filterPriority ? 'rgba(34,80,56,0.08)' : '#f1f5f9',
+                  fontWeight: filterPriority ? 700 : 400,
+                  color: filterPriority ? '#225038' : 'inherit',
+                  '& fieldset': { borderColor: filterPriority ? '#225038' : '#e2e8f0', borderWidth: filterPriority ? 1.5 : 1 },
+                  '&:hover fieldset': { borderColor: '#225038' },
+                  '& .MuiSvgIcon-root': { color: filterPriority ? '#225038' : '#94a3b8' },
+                }}>
+                <MenuItem value="" sx={{ fontSize: 13, color: '#94a3b8' }}>Priority</MenuItem>
                 {['Critical','High','Medium','Low','P0','P1','P2','P3'].map(p =>
                   <MenuItem key={p} value={p} sx={{ fontSize: 13 }}>{p}</MenuItem>)}
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 110 }}>
+            {/* ── STATUS FILTER ── */}
+            <FormControl size="small" sx={{ minWidth: 100, flexShrink: 0 }}>
               <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} displayEmpty
-                sx={{ borderRadius: '9px', fontSize: 13, bgcolor: filterStatus ? '#f0fdf4' : 'transparent',
-                  '& fieldset': { borderColor: filterStatus ? '#86efac' : undefined } }}>
-                <MenuItem value="" sx={{ fontSize: 13 }}>Status</MenuItem>
+                sx={{
+                  borderRadius: '9px', fontSize: 13,
+                  bgcolor: filterStatus ? 'rgba(34,80,56,0.08)' : '#f1f5f9',
+                  fontWeight: filterStatus ? 700 : 400,
+                  color: filterStatus ? '#225038' : 'inherit',
+                  '& fieldset': { borderColor: filterStatus ? '#225038' : '#e2e8f0', borderWidth: filterStatus ? 1.5 : 1 },
+                  '&:hover fieldset': { borderColor: '#225038' },
+                  '& .MuiSvgIcon-root': { color: filterStatus ? '#225038' : '#94a3b8' },
+                }}>
+                <MenuItem value="" sx={{ fontSize: 13, color: '#94a3b8' }}>Status</MenuItem>
                 {['Draft','Active','Deprecated'].map(s =>
                   <MenuItem key={s} value={s} sx={{ fontSize: 13 }}>{s}</MenuItem>)}
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 130 }}>
+            {/* ── TEMPLATE FILTER ── */}
+            <FormControl size="small" sx={{ minWidth: 115, flexShrink: 0 }}>
               <Select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)} displayEmpty
-                sx={{ borderRadius: '9px', fontSize: 13, bgcolor: filterTemplate ? '#f0fdf4' : 'transparent',
-                  '& fieldset': { borderColor: filterTemplate ? '#86efac' : undefined } }}>
-                <MenuItem value="" sx={{ fontSize: 13 }}>Template</MenuItem>
+                sx={{
+                  borderRadius: '9px', fontSize: 13,
+                  bgcolor: filterTemplate ? 'rgba(34,80,56,0.08)' : '#f1f5f9',
+                  fontWeight: filterTemplate ? 700 : 400,
+                  color: filterTemplate ? '#225038' : 'inherit',
+                  '& fieldset': { borderColor: filterTemplate ? '#225038' : '#e2e8f0', borderWidth: filterTemplate ? 1.5 : 1 },
+                  '&:hover fieldset': { borderColor: '#225038' },
+                  '& .MuiSvgIcon-root': { color: filterTemplate ? '#225038' : '#94a3b8' },
+                }}>
+                <MenuItem value="" sx={{ fontSize: 13, color: '#94a3b8' }}>Template</MenuItem>
                 {templates.map(t => <MenuItem key={t.id} value={t.id} sx={{ fontSize: 13 }}>{t.name}</MenuItem>)}
               </Select>
             </FormControl>
 
             {activeFilterCount > 0 && (
-              <Button size="small" startIcon={<ClearIcon sx={{ fontSize: 13 }} />} onClick={clearFilters}
-                sx={{ borderRadius: '8px', color: '#dc2626', fontSize: 12, fontWeight: 600,
-                  bgcolor: '#fee2e2', '&:hover': { bgcolor: '#fecaca' }, px: 1.5, py: 0.5 }}>
-                Clear ({activeFilterCount})
+              <Button size="small" startIcon={<ClearIcon sx={{ fontSize: 12 }} />} onClick={clearFilters}
+                sx={{ borderRadius: '8px', color: '#dc2626', fontSize: 11, fontWeight: 700,
+                  bgcolor: '#fee2e2', border: '1px solid #fca5a5', flexShrink: 0,
+                  '&:hover': { bgcolor: '#fecaca' }, px: 1.2, py: 0.4, minWidth: 0 }}>
+                Clear
               </Button>
             )}
 
-            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
-              {activeFilterCount > 0 || searchQuery ? (
-                <Chip label={`${filteredCases.length} of ${testCases.length}`} size="small"
-                  sx={{ bgcolor: '#f0fdf4', color: '#15803d', fontWeight: 700, fontSize: 11 }} />
-              ) : (
-                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>
-                  {testCases.length} total
-                </Typography>
-              )}
+            {/* ── SPACER ── */}
+            <Box sx={{ flex: 1 }} />
+
+            {/* ── SELECTION PILL ── */}
+            <Box sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.6,
+              px: 1.4, py: 0.35, borderRadius: '20px', flexShrink: 0,
+              bgcolor: someSelected ? '#225038' : '#f1f5f9',
+              color: someSelected ? 'white' : '#94a3b8',
+              fontSize: 11.5, fontWeight: 700,
+              border: '1px solid', borderColor: someSelected ? '#1a3d2b' : '#e2e8f0',
+              transition: 'all 0.2s ease',
+            }}>
+              <Box component="span" sx={{
+                width: 5.5, height: 5.5, borderRadius: '50%', display: 'inline-block',
+                bgcolor: someSelected ? '#86efac' : '#cbd5e1',
+                transition: 'all 0.2s ease',
+              }} />
+              {someSelected ? `${selectedIds.length} selected` : 'None selected'}
             </Box>
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: '#e2e8f0' }} />
+
+            {/* ── BULK EDIT ── */}
+            <Tooltip title={someSelected ? `Bulk edit ${selectedIds.length} test cases` : 'Select rows to enable'} arrow>
+              <span>
+                <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+                  disabled={!someSelected} onClick={() => setBulkEditOpen(true)}
+                  sx={{
+                    borderRadius: '8px', fontSize: 12, fontWeight: 600, flexShrink: 0,
+                    color: someSelected ? '#225038' : '#b0bec5',
+                    bgcolor: someSelected ? 'rgba(34,80,56,0.08)' : 'transparent',
+                    border: '1px solid', borderColor: someSelected ? '#86efac' : '#e2e8f0',
+                    '&:hover': { bgcolor: '#dcfce7', borderColor: '#4ade80' },
+                    '&.Mui-disabled': { color: '#b0bec5', borderColor: '#e9edf0', bgcolor: 'transparent' },
+                    transition: 'all 0.15s',
+                  }}>
+                  Bulk Edit
+                </Button>
+              </span>
+            </Tooltip>
+
+            {/* ── MOVE ── */}
+            <Tooltip title={someSelected ? `Move ${selectedIds.length} cases to another project` : 'Select rows to enable'} arrow>
+              <span>
+                <Button size="small" startIcon={<DriveFileMoveOutlinedIcon sx={{ fontSize: 14 }} />}
+                  disabled={!someSelected} onClick={() => setBulkMoveOpen(true)}
+                  sx={{
+                    borderRadius: '8px', fontSize: 12, fontWeight: 600, flexShrink: 0,
+                    color: someSelected ? '#2563eb' : '#b0bec5',
+                    bgcolor: someSelected ? 'rgba(37,99,235,0.07)' : 'transparent',
+                    border: '1px solid', borderColor: someSelected ? '#bfdbfe' : '#e2e8f0',
+                    '&:hover': { bgcolor: '#dbeafe', borderColor: '#93c5fd' },
+                    '&.Mui-disabled': { color: '#b0bec5', borderColor: '#e9edf0', bgcolor: 'transparent' },
+                    transition: 'all 0.15s',
+                  }}>
+                  Move
+                </Button>
+              </span>
+            </Tooltip>
+
+            {/* ── DELETE ── */}
+            <Tooltip title={someSelected ? `Permanently delete ${selectedIds.length} test cases` : 'Select rows to enable'} arrow>
+              <span>
+                <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 14 }} />}
+                  disabled={!someSelected} onClick={() => setConfirmDeleteOpen(true)}
+                  sx={{
+                    borderRadius: '8px', fontSize: 12, fontWeight: 600, flexShrink: 0,
+                    color: someSelected ? '#dc2626' : '#b0bec5',
+                    bgcolor: someSelected ? 'rgba(220,38,38,0.07)' : 'transparent',
+                    border: '1px solid', borderColor: someSelected ? '#fca5a5' : '#e2e8f0',
+                    '&:hover': { bgcolor: '#fee2e2', borderColor: '#f87171' },
+                    '&.Mui-disabled': { color: '#b0bec5', borderColor: '#e9edf0', bgcolor: 'transparent' },
+                    transition: 'all 0.15s',
+                  }}>
+                  Delete
+                </Button>
+              </span>
+            </Tooltip>
+
+            {someSelected && (
+              <IconButton size="small" onClick={() => setSelectedIds([])}
+                sx={{ color: '#94a3b8', '&:hover': { color: '#475569', bgcolor: '#f1f5f9' } }}>
+                <ClearIcon sx={{ fontSize: 15 }} />
+              </IconButton>
+            )}
+
           </Box>
         </Paper>
-
-        {/* ── BULK ACTION BAR ─────────────────────────────────────────────── */}
-        <Collapse in={someSelected}>
-          <Paper elevation={0} sx={{
-            mb: 2, border: '1.5px solid #86efac', borderRadius: '12px', bgcolor: '#f0fdf4',
-            px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap'
-          }}>
-            <Chip label={`${selectedIds.length} selected`} size="small"
-              sx={{ bgcolor: '#225038', color: 'white', fontWeight: 700, fontSize: 12 }} />
-            <Divider orientation="vertical" flexItem />
-            <Button size="small" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setBulkEditOpen(true)}
-              sx={{ borderRadius: '8px', fontSize: 12, fontWeight: 600, color: '#225038',
-                bgcolor: 'white', border: '1px solid #86efac', '&:hover': { bgcolor: '#dcfce7' } }}>
-              Bulk Edit
-            </Button>
-            <Button size="small" startIcon={<DriveFileMoveOutlinedIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setBulkMoveOpen(true)}
-              sx={{ borderRadius: '8px', fontSize: 12, fontWeight: 600, color: '#2563eb',
-                bgcolor: 'white', border: '1px solid #bfdbfe', '&:hover': { bgcolor: '#dbeafe' } }}>
-              Move to Project
-            </Button>
-            <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setConfirmDeleteOpen(true)}
-              sx={{ borderRadius: '8px', fontSize: 12, fontWeight: 600, color: '#dc2626',
-                bgcolor: 'white', border: '1px solid #fecaca', '&:hover': { bgcolor: '#fee2e2' } }}>
-              Delete Selected
-            </Button>
-            <Button size="small" onClick={() => setSelectedIds([])}
-              sx={{ ml: 'auto', fontSize: 12, color: 'text.secondary', borderRadius: '8px' }}>
-              Deselect all
-            </Button>
-          </Paper>
-        </Collapse>
 
         {/* ── TABLE ───────────────────────────────────────────────────────── */}
         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '14px', overflow: 'hidden' }}>
           <TableContainer>
-            <Table>
+            <Table sx={{ tableLayout: 'fixed', minWidth: 700 }}>
+              <colgroup>
+                <col style={{ width: 52 }} />
+                <col style={{ width: colWidths.id }} />
+                <col style={{ width: colWidths.title }} />
+                <col style={{ width: colWidths.template }} />
+                <col style={{ width: colWidths.priority }} />
+                <col style={{ width: colWidths.status }} />
+                <col style={{ width: Math.max(colWidths.actions, 200) }} />
+              </colgroup>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f8fafc' }}>
-                  <TableCell padding="checkbox" sx={{ pl: 2 }}>
+                  {/* Checkbox col — no resize */}
+                  <TableCell padding="checkbox" sx={{ pl: 2, bgcolor: '#f8fafc' }}>
                     <Tooltip title={allSelected ? 'Deselect all' : 'Select all'}>
-                      <Checkbox
-                        size="small"
-                        checked={allSelected}
-                        indeterminate={someSelected && !allSelected}
-                        onChange={toggleAll}
-                        sx={{ '&.Mui-checked': { color: '#225038' }, '&.MuiCheckbox-indeterminate': { color: '#225038' } }}
-                      />
+                      <Checkbox size="small" checked={allSelected} indeterminate={someSelected && !allSelected} onChange={toggleAll}
+                        sx={{ '&.Mui-checked': { color: '#225038' }, '&.MuiCheckbox-indeterminate': { color: '#225038' } }} />
                     </Tooltip>
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', width: 80 }}>ID</TableCell>
-                  <TableCell sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary' }}>Title</TableCell>
-                  <TableCell sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary' }}>Template</TableCell>
-                  <TableCell sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary' }}>Priority</TableCell>
-                  <TableCell sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary' }}>Status</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', pr: 3 }}>Actions</TableCell>
+
+                  {/* ID col */}
+                  {[
+                    { key: 'id',       label: 'ID',       align: 'left'  },
+                    { key: 'title',    label: 'Title',    align: 'left'  },
+                    { key: 'template', label: 'Template', align: 'left'  },
+                    { key: 'priority', label: 'Priority', align: 'left'  },
+                    { key: 'status',   label: 'Status',   align: 'left'  },
+                    { key: 'actions',  label: 'Actions',  align: 'right' },
+                  ].map(col => (
+                    <TableCell key={col.key} align={col.align}
+                      sx={{
+                        fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.6,
+                        color: '#64748b', bgcolor: '#f8fafc', userSelect: 'none',
+                        position: 'relative', overflow: 'hidden', whiteSpace: 'nowrap',
+                        px: col.key === 'actions' ? 2 : 1.5,
+                        borderBottom: '2px solid #e2e8f0',
+                      }}>
+                      {col.label}
+                      {/* Resize handle */}
+                      {col.key !== 'actions' && (
+                        <Box
+                          onMouseDown={(e) => startResize(col.key, e)}
+                          sx={{
+                            position: 'absolute', right: 0, top: '20%', bottom: '20%',
+                            width: 4, cursor: 'col-resize', borderRadius: 2,
+                            bgcolor: 'transparent',
+                            '&:hover': { bgcolor: '#225038' },
+                            transition: 'background 0.15s',
+                          }}
+                        />
+                      )}
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -733,27 +936,41 @@ export default function TestCasesPage() {
                         <Checkbox size="small" checked={isSelected} onChange={() => toggleSelect(tc.id)}
                           sx={{ '&.Mui-checked': { color: '#225038' } }} />
                       </TableCell>
-                      <TableCell sx={{ py: 1.2, width: 80 }}>
-                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8',
-                          bgcolor: '#f1f5f9', px: 1, py: 0.3, borderRadius: '5px', display: 'inline-block',
-                          fontFamily: 'monospace', letterSpacing: 0.5 }}>
-                          TC-{tc.id}
-                        </Typography>
+                      <TableCell sx={{ py: 1.2, px: 1.5 }}>
+                        <Box sx={{
+                          display: 'inline-flex', alignItems: 'center',
+                          px: 1, py: 0.3, borderRadius: '6px',
+                          bgcolor: isSelected ? '#dcfce7' : '#f1f5f9',
+                          border: '1px solid', borderColor: isSelected ? '#86efac' : '#e2e8f0',
+                          transition: 'all 0.15s',
+                        }}>
+                          <Typography sx={{
+                            fontSize: 11, fontWeight: 700,
+                            color: isSelected ? '#225038' : '#64748b',
+                            fontFamily: 'monospace', letterSpacing: 0.4,
+                            whiteSpace: 'nowrap', lineHeight: 1.4,
+                          }}>
+                            TC-{tc.id}
+                          </Typography>
+                        </Box>
                       </TableCell>
-                      <TableCell sx={{ py: 1.2 }}>
-                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer',
-                          '&:hover': { color: '#225038', textDecoration: 'underline' } }}
+                      <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
+                        <Typography sx={{
+                          fontSize: 13, fontWeight: 600, color: '#1e293b', cursor: 'pointer',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          '&:hover': { color: '#225038', textDecoration: 'underline' }
+                        }}
                           onClick={() => handleOpenDialog(tc)}>
                           {tc.title}
                         </Typography>
                         {tc.field_values?.section && (
-                          <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 0.2 }}>
+                          <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {tc.field_values.section}
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell sx={{ py: 1.2 }}>
-                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                      <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {templates.find(t => t.id === tc.template_id)?.name || '—'}
                         </Typography>
                       </TableCell>
@@ -772,6 +989,26 @@ export default function TestCasesPage() {
                           }} />
                       </TableCell>
                       <TableCell align="right" sx={{ pr: 2, py: 1, whiteSpace: 'nowrap' }}>
+                        {/* Automation toggle */}
+                        {(() => {
+                          const isAuto = tc.field_values?.is_automated === true || tc.field_values?.is_automated === 'true';
+                          return (
+                            <Tooltip title={isAuto ? 'Automated — click to mark as Manual' : 'Manual — click to mark as Automated'}>
+                              <Button size="small" onClick={() => handleToggleAutomation(tc)}
+                                sx={{
+                                  minWidth: 32, width: 32, height: 28, p: 0, borderRadius: '7px', mr: 0.5,
+                                  color: isAuto ? '#7c3aed' : '#94a3b8',
+                                  bgcolor: isAuto ? '#f3e8ff' : 'transparent',
+                                  border: '1px solid',
+                                  borderColor: isAuto ? '#c4b5fd' : '#e2e8f0',
+                                  '&:hover': { bgcolor: isAuto ? '#ede9fe' : '#f3e8ff', borderColor: '#c4b5fd', color: '#7c3aed' },
+                                  transition: 'all 0.15s',
+                                }}>
+                                <SmartToyOutlinedIcon sx={{ fontSize: 14 }} />
+                              </Button>
+                            </Tooltip>
+                          );
+                        })()}
                         <Tooltip title="Edit">
                           <Button size="small" onClick={() => handleOpenDialog(tc)}
                             sx={{ minWidth: 32, width: 32, height: 28, p: 0, borderRadius: '7px', color: '#225038',
