@@ -1,0 +1,17 @@
+/* Basic global styles for the app */
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto', sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+}
