@@ -6,7 +6,7 @@ A comprehensive TestRail-style test case management tool built with React, Node.
 
 | Dashboard | Test Cases |
 |-----------|------------|
-| ![Dashboard](screenshots/02-dashboard.png) | ![Test Cases](screenshots/03-test-cases.png) |
+| ![Dashboard](screenshots/02-dashboard.png) |
 
 | Test Runs | Test Run Detail |
 |-----------|----------------|
