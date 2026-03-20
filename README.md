@@ -29,30 +29,39 @@ A comprehensive TestRail-style test case management tool built with React, Node.
 ✅ **User Management**
 - Signup/Login with JWT authentication
 - Role-based access control (Admin, QA Lead, Tester)
-- Team/Workspace management
+- Groups & Roles management with CSV import/export
+- Team/Workspace management with multi-project support
 
 ✅ **Test Case Management**
-- Create, edit, delete, and clone test cases
-- Custom test case templates
-- Bulk upload (CSV, Excel, JSON)
+- Create, edit, delete, and clone test cases with TC-ID tracking
+- Custom test case templates with JSONB field support
+- Bulk upload via CSV/Excel with column mapping preview
 - Bulk download (Excel, CSV)
 - Full edit history with version tracking
+- Automation flag toggle per test case (manual/automated)
+- Search, filter by priority/status/template, bulk edit & bulk delete
 
 ✅ **Test Execution**
-- Create test runs
-- Assign test cases to runs
+- Create and manage test runs per project
 - Mark pass/fail/skip with comments
-- Real-time progress tracking
+- Real-time progress bar and pass rate tracking
+- Milestone linking for release-based test planning
 
-✅ **Reporting & Analytics**
-- Pass/Fail/Skip counts
-- Overall execution metrics
-- Audit log for compliance
-- Test case version history
+✅ **Dashboard & Analytics**
+- Release Readiness score (coverage × quality × critical tests)
+- Pre-Release Checklist auto-generated from test data
+- Pass Rate Trend chart across last 8 test runs
+- Execution Velocity (executions per day, last 14 days)
+- Coverage Heatmap by priority level
+- Test Debt Monitor with health score
+- Flaky Test Radar and Most Failing Tests
+- Automation Coverage by project with live refresh
+- Milestone Risk tracking for upcoming releases
 
 ✅ **CI/CD Integration Ready**
-- Webhook support for automation
 - API-first architecture
+- Workspace-scoped data isolation
+- Dedicated `/reports/automation` endpoint for CI dashboards
 
 ## Tech Stack
 
