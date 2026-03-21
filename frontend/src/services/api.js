@@ -67,11 +67,11 @@ export const testRunAPI = {
 
 // Report APIs
 export const reportAPI = {
-  getMetrics: (runId) => api.get('/reports/metrics', { params: runId ? { run_id: runId } : {} }),
+  getMetrics: (runId, projectId) => api.get('/reports/metrics', { params: { ...(runId ? { run_id: runId } : {}), ...(projectId ? { project_id: projectId } : {}) } }),
   getAuditLog: () => api.get('/reports/audit-log'),
   getHistory: (testCaseId) => api.get(`/reports/history/${testCaseId}`),
   getTestCaseResults: (testCaseId) => api.get(`/reports/results/${testCaseId}`),
-  getDashboard: () => api.get('/reports/dashboard'),
+  getDashboard: (projectId) => api.get('/reports/dashboard', { params: projectId ? { project_id: projectId } : {} }),
   getAutomation: () => api.get('/reports/automation'),
 };
 
@@ -135,6 +135,10 @@ export const milestoneAPI = {
   get: (id) => api.get(`/milestones/${id}`),
   update: (id, data) => api.put(`/milestones/${id}`, data),
   delete: (id) => api.delete(`/milestones/${id}`)
+};
+
+export const enrichAPI = {
+  enrich: (data) => api.post('/ai/enrich', data),
 };
 
 export default api;

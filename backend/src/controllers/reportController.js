@@ -2,7 +2,7 @@ const pool = require('../config/database');
 
 const getReportMetrics = async (req, res) => {
   try {
-    const workspaceId = req.user.workspace_id;
+    const workspaceId = req.query.project_id ? parseInt(req.query.project_id, 10) : req.user.workspace_id;
     const runId = req.query.run_id ? parseInt(req.query.run_id, 10) : null;
 
     // Total test cases (always workspace-level)
@@ -152,7 +152,7 @@ const safeQuery = async (pool, sql, params = []) => {
 
 const getDashboardAnalytics = async (req, res) => {
   try {
-    const workspaceId = req.user.workspace_id;
+    const workspaceId = req.query.project_id ? parseInt(req.query.project_id, 10) : req.user.workspace_id;
 
     // 1. Total cases
     const totalCasesQ = await safeQuery(pool, 'SELECT COUNT(*) as count FROM test_cases WHERE workspace_id = $1', [workspaceId]);

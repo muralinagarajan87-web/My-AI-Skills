@@ -5,7 +5,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, FormLabel, Select, MenuItem, Checkbox, FormControlLabel,
   FormGroup, RadioGroup, Radio, Grid, InputLabel, IconButton, Divider,
-  Chip, Tooltip, InputAdornment, Alert, Snackbar, TablePagination
+  Chip, Tooltip, InputAdornment, Alert, Snackbar, TablePagination, Popover
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -17,7 +17,7 @@ import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined
 import ClearIcon from '@mui/icons-material/Clear';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
-import { testCaseAPI, templateAPI, workspaceAPI, reportAPI } from '../services/api';
+import { testCaseAPI, templateAPI, workspaceAPI, reportAPI, enrichAPI } from '../services/api';
 import UploadMappingDialog from '../components/UploadMappingDialog';
 
 export default function TestCasesPage() {
@@ -35,7 +35,7 @@ export default function TestCasesPage() {
     description: '',
     steps: '',
     expected_result: '',
-    priority: 'Medium',
+    priority: 'P2',
     section: '',
     type: 'Other',
     assigned_to: '',
@@ -47,7 +47,48 @@ export default function TestCasesPage() {
     preconditions: '',
   });
   const [fieldValues, setFieldValues] = useState({});
+  const [enriching, setEnriching] = useState(false);
+  const [enrichPreview, setEnrichPreview] = useState(null);
+  const [colAnchor, setColAnchor] = useState(null);
+  const [visibleCols, setVisibleCols] = useState({
+    template: true, priority: true, status: true, automated: true, section: false, type: false,
+  });
+  const toggleCol = (key) => setVisibleCols(p => ({ ...p, [key]: !p[key] }));
   const currentWorkspaceId = JSON.parse(localStorage.getItem('user') || '{}').workspace_id;
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    setEnrichPreview(null);
+    try {
+      const r = await enrichAPI.enrich({
+        title: formData.title,
+        description: formData.description,
+        steps: formData.steps,
+        expected_result: formData.expected_result,
+        preconditions: formData.preconditions,
+      });
+      setEnrichPreview(r.data.enriched);
+    } catch (e) {
+      console.error('Enrichment error:', e);
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  const applyEnrichment = () => {
+    if (!enrichPreview) return;
+    setFormData(prev => ({
+      ...prev,
+      title: enrichPreview.title || prev.title,
+      description: enrichPreview.description || prev.description,
+      steps: Array.isArray(enrichPreview.steps)
+        ? enrichPreview.steps.join('\n')
+        : (enrichPreview.steps || prev.steps),
+      expected_result: enrichPreview.expected_result || prev.expected_result,
+      preconditions: enrichPreview.preconditions || prev.preconditions,
+    }));
+    setEnrichPreview(null);
+  };
 
   const loadAutoStats = async () => {
     try {
@@ -194,6 +235,7 @@ export default function TestCasesPage() {
     setOpenDialog(false);
     setEditingId(null);
     setFieldValues({});
+    setEnrichPreview(null);
   };
 
   const handleChange = (e) => {
@@ -709,7 +751,7 @@ export default function TestCasesPage() {
                   '& .MuiSvgIcon-root': { color: filterPriority ? '#225038' : '#94a3b8' },
                 }}>
                 <MenuItem value="" sx={{ fontSize: 13, color: '#94a3b8' }}>Priority</MenuItem>
-                {['Critical','High','Medium','Low','P0','P1','P2','P3'].map(p =>
+                {['P0','P1','P2','P3','Critical','High','Medium','Low'].map(p =>
                   <MenuItem key={p} value={p} sx={{ fontSize: 13 }}>{p}</MenuItem>)}
               </Select>
             </FormControl>
@@ -778,6 +820,41 @@ export default function TestCasesPage() {
               }} />
               {someSelected ? `${selectedIds.length} selected` : 'None selected'}
             </Box>
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: '#e2e8f0' }} />
+
+            {/* ── COLUMNS ── */}
+            <Button size="small" onClick={e => setColAnchor(e.currentTarget)}
+              sx={{
+                borderRadius: '8px', fontSize: 12, fontWeight: 600, flexShrink: 0,
+                color: '#475569', bgcolor: '#f1f5f9', border: '1px solid #e2e8f0',
+                '&:hover': { bgcolor: '#e2e8f0' }, px: 1.4,
+              }}>
+              ⊞ Columns
+            </Button>
+            <Popover open={Boolean(colAnchor)} anchorEl={colAnchor} onClose={() => setColAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              PaperProps={{ sx: { p: 1.5, borderRadius: '10px', minWidth: 180, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' } }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, mb: 1 }}>
+                Toggle Columns
+              </Typography>
+              {[
+                { key: 'template',  label: 'Template'  },
+                { key: 'priority',  label: 'Priority'  },
+                { key: 'status',    label: 'Status'    },
+                { key: 'automated', label: 'Automated' },
+                { key: 'section',   label: 'Section'   },
+                { key: 'type',      label: 'Type'      },
+              ].map(col => (
+                <FormControlLabel key={col.key}
+                  control={<Checkbox size="small" checked={!!visibleCols[col.key]} onChange={() => toggleCol(col.key)}
+                    sx={{ '&.Mui-checked': { color: '#225038' }, py: 0.3 }} />}
+                  label={<Typography sx={{ fontSize: 13 }}>{col.label}</Typography>}
+                  sx={{ display: 'flex', m: 0 }}
+                />
+              ))}
+            </Popover>
 
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: '#e2e8f0' }} />
 
@@ -856,10 +933,13 @@ export default function TestCasesPage() {
                 <col style={{ width: 52 }} />
                 <col style={{ width: colWidths.id }} />
                 <col style={{ width: colWidths.title }} />
-                <col style={{ width: colWidths.template }} />
-                <col style={{ width: colWidths.priority }} />
-                <col style={{ width: colWidths.status }} />
-                <col style={{ width: Math.max(colWidths.actions, 200) }} />
+                {visibleCols.section   && <col style={{ width: 120 }} />}
+                {visibleCols.type      && <col style={{ width: 100 }} />}
+                {visibleCols.template  && <col style={{ width: colWidths.template }} />}
+                {visibleCols.priority  && <col style={{ width: colWidths.priority }} />}
+                {visibleCols.status    && <col style={{ width: colWidths.status }} />}
+                {visibleCols.automated && <col style={{ width: 110 }} />}
+                <col style={{ width: Math.max(colWidths.actions, 150) }} />
               </colgroup>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f8fafc' }}>
@@ -871,15 +951,18 @@ export default function TestCasesPage() {
                     </Tooltip>
                   </TableCell>
 
-                  {/* ID col */}
+                  {/* Dynamic header cols */}
                   {[
-                    { key: 'id',       label: 'ID',       align: 'left'  },
-                    { key: 'title',    label: 'Title',    align: 'left'  },
-                    { key: 'template', label: 'Template', align: 'left'  },
-                    { key: 'priority', label: 'Priority', align: 'left'  },
-                    { key: 'status',   label: 'Status',   align: 'left'  },
-                    { key: 'actions',  label: 'Actions',  align: 'right' },
-                  ].map(col => (
+                    { key: 'id',        label: 'ID',        align: 'left',  always: true  },
+                    { key: 'title',     label: 'Title',     align: 'left',  always: true  },
+                    { key: 'section',   label: 'Section',   align: 'left',  always: false },
+                    { key: 'type',      label: 'Type',      align: 'left',  always: false },
+                    { key: 'template',  label: 'Template',  align: 'left',  always: false },
+                    { key: 'priority',  label: 'Priority',  align: 'left',  always: false },
+                    { key: 'status',    label: 'Status',    align: 'left',  always: false },
+                    { key: 'automated', label: 'Automated', align: 'left',  always: false },
+                    { key: 'actions',   label: 'Actions',   align: 'right', always: true  },
+                  ].filter(col => col.always || visibleCols[col.key]).map(col => (
                     <TableCell key={col.key} align={col.align}
                       sx={{
                         fontWeight: 700, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: 0.6,
@@ -909,7 +992,7 @@ export default function TestCasesPage() {
               <TableBody>
                 {filteredCases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
+                    <TableCell colSpan={3 + Object.values(visibleCols).filter(Boolean).length} align="center" sx={{ py: 8 }}>
                       <CheckBoxOutlineBlankIcon sx={{ fontSize: 40, color: '#e2e8f0', mb: 1, display: 'block', mx: 'auto' }} />
                       <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'text.secondary' }}>
                         {searchQuery || activeFilterCount > 0 ? 'No test cases match your filters' : 'No test cases yet'}
@@ -969,25 +1052,60 @@ export default function TestCasesPage() {
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
-                        <Typography sx={{ fontSize: 12, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {templates.find(t => t.id === tc.template_id)?.name || '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell sx={{ py: 1.2 }}>
-                        {tc.priority ? (
-                          <Chip label={tc.priority} size="small"
-                            sx={{ bgcolor: pColor.bg, color: pColor.color, fontWeight: 700, fontSize: 11, height: 20, borderRadius: '5px' }} />
-                        ) : <Typography sx={{ color: 'text.disabled', fontSize: 13 }}>—</Typography>}
-                      </TableCell>
-                      <TableCell sx={{ py: 1.2 }}>
-                        <Chip label={tc.status || 'Draft'} size="small"
-                          sx={{
-                            bgcolor: tc.status === 'Active' ? '#dcfce7' : tc.status === 'Deprecated' ? '#fee2e2' : '#f1f5f9',
-                            color: tc.status === 'Active' ? '#15803d' : tc.status === 'Deprecated' ? '#dc2626' : '#64748b',
-                            fontWeight: 600, fontSize: 11, height: 20, borderRadius: '5px'
-                          }} />
-                      </TableCell>
+                      {visibleCols.section && (
+                        <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tc.field_values?.section || '—'}
+                          </Typography>
+                        </TableCell>
+                      )}
+                      {visibleCols.type && (
+                        <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tc.field_values?.type || '—'}
+                          </Typography>
+                        </TableCell>
+                      )}
+                      {visibleCols.template && (
+                        <TableCell sx={{ py: 1.2, px: 1.5, overflow: 'hidden' }}>
+                          <Typography sx={{ fontSize: 12, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {templates.find(t => t.id === tc.template_id)?.name || '—'}
+                          </Typography>
+                        </TableCell>
+                      )}
+                      {visibleCols.priority && (
+                        <TableCell sx={{ py: 1.2 }}>
+                          {tc.priority ? (
+                            <Chip label={tc.priority} size="small"
+                              sx={{ bgcolor: pColor.bg, color: pColor.color, fontWeight: 700, fontSize: 11, height: 20, borderRadius: '5px' }} />
+                          ) : <Typography sx={{ color: 'text.disabled', fontSize: 13 }}>—</Typography>}
+                        </TableCell>
+                      )}
+                      {visibleCols.status && (
+                        <TableCell sx={{ py: 1.2 }}>
+                          <Chip label={tc.status || 'Draft'} size="small"
+                            sx={{
+                              bgcolor: tc.status === 'Active' ? '#dcfce7' : tc.status === 'Deprecated' ? '#fee2e2' : '#f1f5f9',
+                              color: tc.status === 'Active' ? '#15803d' : tc.status === 'Deprecated' ? '#dc2626' : '#64748b',
+                              fontWeight: 600, fontSize: 11, height: 20, borderRadius: '5px'
+                            }} />
+                        </TableCell>
+                      )}
+                      {visibleCols.automated && (
+                        <TableCell sx={{ py: 1.2 }}>
+                          {(() => {
+                            const isAuto = tc.field_values?.is_automated === true || tc.field_values?.is_automated === 'true';
+                            return (
+                              <Chip label={isAuto ? 'Automated' : 'Manual'} size="small"
+                                sx={{
+                                  bgcolor: isAuto ? '#f3e8ff' : '#f1f5f9',
+                                  color: isAuto ? '#7c3aed' : '#64748b',
+                                  fontWeight: 600, fontSize: 11, height: 20, borderRadius: '5px'
+                                }} />
+                            );
+                          })()}
+                        </TableCell>
+                      )}
                       <TableCell align="right" sx={{ pr: 2, py: 1, whiteSpace: 'nowrap' }}>
                         {/* Automation toggle */}
                         {(() => {
@@ -1187,10 +1305,84 @@ export default function TestCasesPage() {
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           borderBottom: 1, borderColor: 'divider', pb: 2 }}>
           <Typography variant="h6">{editingId ? 'Edit Test Case' : 'Add Test Case'}</Typography>
-          <IconButton size="small" onClick={handleCloseDialog}><CloseIcon /></IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title="Rewrite fields in professional QA English using AI">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<SmartToyOutlinedIcon />}
+                  onClick={handleEnrich}
+                  disabled={enriching}
+                  sx={{ textTransform: 'none', borderColor: '#7c3aed', color: '#7c3aed',
+                    '&:hover': { borderColor: '#6d28d9', bgcolor: 'rgba(124,58,237,0.06)' } }}
+                >
+                  {enriching ? 'Enriching…' : '✨ AI Enrich'}
+                </Button>
+              </span>
+            </Tooltip>
+            <IconButton size="small" onClick={handleCloseDialog}><CloseIcon /></IconButton>
+          </Box>
         </DialogTitle>
 
         <DialogContent sx={{ p: 3 }}>
+          {/* AI Enrichment Preview */}
+          {enrichPreview && (
+            <Alert
+              severity="info"
+              icon={<SmartToyOutlinedIcon />}
+              sx={{ mb: 3, '& .MuiAlert-message': { width: '100%' } }}
+              action={
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button size="small" variant="contained" color="primary" onClick={applyEnrichment}
+                    sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}>
+                    Apply
+                  </Button>
+                  <Button size="small" variant="outlined" onClick={() => setEnrichPreview(null)}
+                    sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}>
+                    Discard
+                  </Button>
+                </Box>
+              }
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                AI Enrichment Preview — review and click Apply to update the form
+              </Typography>
+              {enrichPreview.title && (
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">Title:</Typography>
+                  <Typography variant="body2">{enrichPreview.title}</Typography>
+                </Box>
+              )}
+              {enrichPreview.preconditions && (
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">Preconditions:</Typography>
+                  <Typography variant="body2">{enrichPreview.preconditions}</Typography>
+                </Box>
+              )}
+              {enrichPreview.description && (
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">Description:</Typography>
+                  <Typography variant="body2">{enrichPreview.description}</Typography>
+                </Box>
+              )}
+              {enrichPreview.steps && (
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">Steps:</Typography>
+                  {(Array.isArray(enrichPreview.steps) ? enrichPreview.steps : [enrichPreview.steps]).map((s, i) => (
+                    <Typography key={i} variant="body2">{i + 1}. {s}</Typography>
+                  ))}
+                </Box>
+              )}
+              {enrichPreview.expected_result && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Expected Result:</Typography>
+                  <Typography variant="body2">{enrichPreview.expected_result}</Typography>
+                </Box>
+              )}
+            </Alert>
+          )}
+
           {/* Title */}
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
@@ -1273,10 +1465,10 @@ export default function TestCasesPage() {
                   label="Priority *"
                   onChange={handleChange}
                 >
-                  <MenuItem value="Critical">Critical</MenuItem>
-                  <MenuItem value="High">High</MenuItem>
-                  <MenuItem value="Medium">Medium</MenuItem>
-                  <MenuItem value="Low">Low</MenuItem>
+                  <MenuItem value="P0"><Box sx={{ display:'flex', alignItems:'center', gap:1 }}><Box sx={{ width:8, height:8, borderRadius:'50%', bgcolor:'#dc2626' }} />P0 — Critical</Box></MenuItem>
+                  <MenuItem value="P1"><Box sx={{ display:'flex', alignItems:'center', gap:1 }}><Box sx={{ width:8, height:8, borderRadius:'50%', bgcolor:'#ea580c' }} />P1 — High</Box></MenuItem>
+                  <MenuItem value="P2"><Box sx={{ display:'flex', alignItems:'center', gap:1 }}><Box sx={{ width:8, height:8, borderRadius:'50%', bgcolor:'#ca8a04' }} />P2 — Medium</Box></MenuItem>
+                  <MenuItem value="P3"><Box sx={{ display:'flex', alignItems:'center', gap:1 }}><Box sx={{ width:8, height:8, borderRadius:'50%', bgcolor:'#16a34a' }} />P3 — Low</Box></MenuItem>
                 </Select>
               </FormControl>
             </Grid>

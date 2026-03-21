@@ -51,18 +51,15 @@ function NavButton({ href, label, active }) {
         borderRadius: '9px',
         bgcolor: active ? 'rgba(255,255,255,0.13)' : 'transparent',
         textTransform: 'none',
-        // Hover
         '&:hover': {
           color: '#ffffff',
           bgcolor: 'rgba(255,255,255,0.09)',
         },
-        // Click / press
         '&:active': {
           bgcolor: 'rgba(255,255,255,0.22)',
           transform: 'scale(0.96)',
         },
         transition: 'background 0.16s ease, color 0.16s ease, transform 0.1s ease',
-        // Green underline pill when active
         '&::after': {
           content: '""',
           position: 'absolute',
@@ -75,7 +72,6 @@ function NavButton({ href, label, active }) {
           bgcolor: '#4ade80',
           transition: 'width 0.22s ease',
         },
-        // Hover underline hint
         '&:hover::after': {
           width: active ? '55%' : '30%',
           bgcolor: active ? '#4ade80' : 'rgba(255,255,255,0.3)',
