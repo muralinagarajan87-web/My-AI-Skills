@@ -17,6 +17,7 @@ import MilestonesPage from './pages/MilestonesPage';
 import MilestonePage from './pages/MilestonePage';
 import DefectsPage from './pages/DefectsPage';
 import RequirementsPage from './pages/RequirementsPage';
+import AIFeaturesPage from './pages/AIFeaturesPage';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -33,6 +34,7 @@ const NAV_LINKS = [
   { label: 'Milestones',    href: '/milestones'     },
   { label: 'Defects',      href: '/defects'        },
   { label: 'Requirements', href: '/requirements'   },
+  { label: 'AI',           href: '/ai'             },
   { label: 'Settings',     href: '/settings'       },
   { label: 'Users',      href: '/users'       },
 ];
@@ -224,6 +226,7 @@ export default function App() {
           <Route path="/milestone/:id" element={<ProtectedRoute><MilestonePage /></ProtectedRoute>} />
           <Route path="/defects"       element={<ProtectedRoute><DefectsPage /></ProtectedRoute>} />
           <Route path="/requirements"  element={<ProtectedRoute><RequirementsPage /></ProtectedRoute>} />
+          <Route path="/ai"            element={<ProtectedRoute><AIFeaturesPage /></ProtectedRoute>} />
           <Route path="/"            element={<Navigate to="/dashboard" />} />
         </Routes>
       </Box>

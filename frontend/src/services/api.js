@@ -137,9 +137,17 @@ export const milestoneAPI = {
   delete: (id) => api.delete(`/milestones/${id}`)
 };
 
-export const enrichAPI = {
+export const aiAPI = {
   enrich: (data) => api.post('/ai/enrich', data),
+  generate: (data) => api.post('/ai/generate', data),
+  suggestTags: (data) => api.post('/ai/suggest-tags', data),
+  detectDuplicates: (data) => api.post('/ai/detect-duplicates', data),
+  getRiskScores: () => api.get('/ai/risk-scores'),
+  getPredictFlaky: () => api.get('/ai/predict-flaky'),
 };
+
+// Legacy alias
+export const enrichAPI = aiAPI;
 
 // Add version endpoints to testCaseAPI
 testCaseAPI.getVersions = (id) => api.get(`/test-cases/${id}/versions`);
