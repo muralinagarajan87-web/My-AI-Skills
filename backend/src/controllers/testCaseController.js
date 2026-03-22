@@ -305,7 +305,102 @@ const bulkMoveTestCases = async (req, res) => {
   }
 };
 
+const getVersionHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = req.user.workspace_id;
+
+    const ownerCheck = await pool.query(
+      'SELECT id FROM test_cases WHERE id = $1 AND workspace_id = $2',
+      [id, workspaceId]
+    );
+    if (ownerCheck.rows.length === 0) return res.status(404).json({ error: 'Test case not found' });
+
+    const result = await pool.query(
+      `SELECT v.*, u.name AS changed_by_name
+       FROM test_case_versions v
+       LEFT JOIN users u ON v.changed_by = u.id
+       WHERE v.test_case_id = $1
+       ORDER BY v.version_number DESC`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const restoreVersion = async (req, res) => {
+  try {
+    const { id, versionId } = req.params;
+    const workspaceId = req.user.workspace_id;
+    const userId = req.user.id;
+
+    // Verify test case belongs to workspace
+    const ownerCheck = await pool.query(
+      'SELECT id FROM test_cases WHERE id = $1 AND workspace_id = $2',
+      [id, workspaceId]
+    );
+    if (ownerCheck.rows.length === 0) return res.status(404).json({ error: 'Test case not found' });
+
+    // Fetch the version to restore
+    const versionResult = await pool.query(
+      'SELECT * FROM test_case_versions WHERE id = $1 AND test_case_id = $2',
+      [versionId, id]
+    );
+    if (versionResult.rows.length === 0) return res.status(404).json({ error: 'Version not found' });
+
+    const version = versionResult.rows[0];
+
+    // Apply version data back to the test case
+    const updated = await pool.query(
+      `UPDATE test_cases
+       SET title           = $1,
+           description     = $2,
+           steps           = $3,
+           expected_result = $4,
+           priority        = $5,
+           field_values    = $6,
+           updated_at      = CURRENT_TIMESTAMP
+       WHERE id = $7 AND workspace_id = $8
+       RETURNING *`,
+      [
+        version.title, version.description,
+        JSON.stringify(version.steps), version.expected_result,
+        version.priority, JSON.stringify(version.field_values || {}),
+        id, workspaceId,
+      ]
+    );
+
+    // Get current max version number and create a new version entry
+    const maxVerResult = await pool.query(
+      'SELECT MAX(version_number) AS max_version FROM test_case_versions WHERE test_case_id = $1',
+      [id]
+    );
+    const nextVersion = (maxVerResult.rows[0].max_version || 0) + 1;
+
+    await pool.query(
+      `INSERT INTO test_case_versions
+        (test_case_id, version_number, title, description, steps, expected_result, priority, field_values, changed_by, change_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        id, nextVersion,
+        version.title, version.description,
+        JSON.stringify(version.steps), version.expected_result,
+        version.priority, JSON.stringify(version.field_values || {}),
+        userId, `Restored from version ${version.version_number}`,
+      ]
+    );
+
+    res.json({ message: `Test case restored to version ${version.version_number}`, testCase: updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createTestCase, getTestCases, getTestCase, updateTestCase, deleteTestCase, cloneTestCase,
-  bulkDeleteTestCases, bulkUpdateTestCases, bulkMoveTestCases
+  bulkDeleteTestCases, bulkUpdateTestCases, bulkMoveTestCases,
+  getVersionHistory, restoreVersion,
 };

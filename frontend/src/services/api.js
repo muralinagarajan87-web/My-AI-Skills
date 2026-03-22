@@ -141,4 +141,65 @@ export const enrichAPI = {
   enrich: (data) => api.post('/ai/enrich', data),
 };
 
+// Add version endpoints to testCaseAPI
+testCaseAPI.getVersions = (id) => api.get(`/test-cases/${id}/versions`);
+testCaseAPI.restoreVersion = (id, versionId) => api.post(`/test-cases/${id}/restore/${versionId}`);
+
+export const defectAPI = {
+  create: (data) => api.post('/defects', data),
+  getAll: (params) => api.get('/defects', { params }),
+  get: (id) => api.get(`/defects/${id}`),
+  update: (id, data) => api.put(`/defects/${id}`, data),
+  delete: (id) => api.delete(`/defects/${id}`),
+  syncGitHub: (id) => api.post(`/defects/${id}/sync-github`),
+  getStats: () => api.get('/defects/stats'),
+};
+
+export const attachmentAPI = {
+  upload: (file, entityType, entityId) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entity_type', entityType);
+    formData.append('entity_id', entityId);
+    return api.post('/attachments', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getAll: (entityType, entityId) => api.get('/attachments', { params: { entity_type: entityType, entity_id: entityId } }),
+  delete: (id) => api.delete(`/attachments/${id}`),
+  downloadUrl: (id) => `${API_URL}/attachments/${id}/download`,
+};
+
+export const commentAPI = {
+  getAll: (entityType, entityId) => api.get('/comments', { params: { entity_type: entityType, entity_id: entityId } }),
+  create: (data) => api.post('/comments', data),
+  update: (id, data) => api.put(`/comments/${id}`, data),
+  delete: (id) => api.delete(`/comments/${id}`),
+};
+
+export const environmentAPI = {
+  getAll: () => api.get('/environments'),
+  create: (data) => api.post('/environments', data),
+  update: (id, data) => api.put(`/environments/${id}`, data),
+  delete: (id) => api.delete(`/environments/${id}`),
+  getStats: (id) => api.get(`/environments/${id}/stats`),
+};
+
+export const integrationAPI = {
+  getAll: () => api.get('/integrations'),
+  create: (data) => api.post('/integrations', data),
+  update: (id, data) => api.put(`/integrations/${id}`, data),
+  delete: (id) => api.delete(`/integrations/${id}`),
+  test: (id) => api.post(`/integrations/${id}/test`),
+};
+
+export const requirementAPI = {
+  getAll: () => api.get('/requirements'),
+  get: (id) => api.get(`/requirements/${id}`),
+  create: (data) => api.post('/requirements', data),
+  update: (id, data) => api.put(`/requirements/${id}`, data),
+  delete: (id) => api.delete(`/requirements/${id}`),
+  linkTestCases: (id, testCaseIds) => api.post(`/requirements/${id}/link`, { test_case_ids: testCaseIds }),
+  unlinkTestCase: (reqId, tcId) => api.delete(`/requirements/${reqId}/unlink/${tcId}`),
+  getCoverage: () => api.get('/requirements/coverage'),
+};
+
 export default api;

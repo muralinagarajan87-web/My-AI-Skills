@@ -5,7 +5,8 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, FormLabel, Select, MenuItem, Checkbox, FormControlLabel,
   FormGroup, RadioGroup, Radio, Grid, InputLabel, IconButton, Divider,
-  Chip, Tooltip, InputAdornment, Alert, Snackbar, TablePagination, Popover
+  Chip, Tooltip, InputAdornment, Alert, Snackbar, TablePagination, Popover,
+  Drawer, Tabs, Tab, CircularProgress
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -17,8 +18,13 @@ import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined
 import ClearIcon from '@mui/icons-material/Clear';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
-import { testCaseAPI, templateAPI, workspaceAPI, reportAPI, enrichAPI } from '../services/api';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { testCaseAPI, templateAPI, workspaceAPI, reportAPI, enrichAPI, defectAPI } from '../services/api';
 import UploadMappingDialog from '../components/UploadMappingDialog';
+import CommentThread from '../components/CommentThread';
+import AttachmentPanel from '../components/AttachmentPanel';
+import VersionHistory from '../components/VersionHistory';
 
 export default function TestCasesPage() {
   const [testCases, setTestCases] = useState([]);
@@ -147,6 +153,33 @@ export default function TestCasesPage() {
   const [fieldErrors] = useState({});
   const [resultsDialogOpen, setResultsDialogOpen] = useState(false);
   const [selectedTestCaseResults, setSelectedTestCaseResults] = useState(null);
+
+  // Detail drawer state
+  const [drawerTc, setDrawerTc] = useState(null);
+  const [drawerTab, setDrawerTab] = useState(0);
+  const [drawerDefects, setDrawerDefects] = useState([]);
+  const [drawerDefectsLoading, setDrawerDefectsLoading] = useState(false);
+
+  const openDrawer = (tc) => {
+    setDrawerTc(tc);
+    setDrawerTab(0);
+    setDrawerDefects([]);
+  };
+
+  const loadDrawerDefects = async (tcId) => {
+    setDrawerDefectsLoading(true);
+    try {
+      const r = await defectAPI.getAll({ test_case_id: tcId });
+      setDrawerDefects(r.data || []);
+    } catch (e) { console.error(e); }
+    finally { setDrawerDefectsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (drawerTc && drawerTab === 4) {
+      loadDrawerDefects(drawerTc.id);
+    }
+  }, [drawerTc, drawerTab]);
 
   // ── Search & Filter ────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -1043,7 +1076,7 @@ export default function TestCasesPage() {
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           '&:hover': { color: '#225038', textDecoration: 'underline' }
                         }}
-                          onClick={() => handleOpenDialog(tc)}>
+                          onClick={() => openDrawer(tc)}>
                           {tc.title}
                         </Typography>
                         {tc.field_values?.section && (
@@ -1724,6 +1757,200 @@ export default function TestCasesPage() {
         onClose={() => setUploadOpen(false)}
         onSuccess={loadTestCases}
       />
+
+      {/* ── DETAIL DRAWER ─────────────────────────────────────────── */}
+      <Drawer
+        anchor="right"
+        open={Boolean(drawerTc)}
+        onClose={() => setDrawerTc(null)}
+        PaperProps={{ sx: { width: { xs: '100%', sm: 600 }, display: 'flex', flexDirection: 'column' } }}
+      >
+        {drawerTc && (
+          <>
+            {/* Drawer Header */}
+            <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid #e2e8f0', background: 'linear-gradient(135deg, #1a3d2b 0%, #225038 100%)', flexShrink: 0 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box sx={{ flex: 1, mr: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                    <Box sx={{ px: 1, py: 0.3, borderRadius: '6px', bgcolor: 'rgba(255,255,255,0.15)' }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.8)', fontFamily: 'monospace' }}>
+                        TC-{drawerTc.id}
+                      </Typography>
+                    </Box>
+                    {drawerTc.priority && (
+                      <Chip label={drawerTc.priority} size="small"
+                        sx={{ height: 20, fontSize: 10, fontWeight: 700, borderRadius: '5px',
+                          bgcolor: PRIORITY_COLORS[drawerTc.priority]?.bg || '#f1f5f9',
+                          color: PRIORITY_COLORS[drawerTc.priority]?.color || '#64748b' }} />
+                    )}
+                  </Box>
+                  <Typography sx={{ fontSize: 15, fontWeight: 700, color: 'white', lineHeight: 1.35 }}>
+                    {drawerTc.title}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                  <Tooltip title="Edit">
+                    <IconButton size="small" onClick={() => { setDrawerTc(null); handleOpenDialog(drawerTc); }}
+                      sx={{ color: 'rgba(255,255,255,0.75)', '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+                      <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <IconButton size="small" onClick={() => setDrawerTc(null)}
+                    sx={{ color: 'rgba(255,255,255,0.75)', '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' } }}>
+                    <CloseIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Box>
+              </Box>
+            </Box>
+
+            {/* Tabs */}
+            <Tabs value={drawerTab} onChange={(_, v) => setDrawerTab(v)} variant="scrollable" scrollButtons="auto"
+              sx={{ px: 2, borderBottom: '1px solid #e2e8f0', minHeight: 44, flexShrink: 0,
+                '& .MuiTab-root': { minHeight: 44, fontSize: 12, fontWeight: 600, textTransform: 'none', color: '#64748b', px: 1.5 },
+                '& .Mui-selected': { color: '#225038' },
+                '& .MuiTabs-indicator': { bgcolor: '#225038' } }}>
+              <Tab label="Details" />
+              <Tab label="Comments" />
+              <Tab label="Attachments" />
+              <Tab label="History" />
+              <Tab label="Defects" />
+            </Tabs>
+
+            {/* Tab Content */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+
+              {/* DETAILS TAB */}
+              {drawerTab === 0 && (
+                <Box>
+                  {drawerTc.description && (
+                    <Box sx={{ mb: 2.5 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.75 }}>Description</Typography>
+                      <Typography sx={{ fontSize: 13, color: '#374151', lineHeight: 1.7 }}>{drawerTc.description}</Typography>
+                    </Box>
+                  )}
+                  {drawerTc.steps && drawerTc.steps.length > 0 && (
+                    <Box sx={{ mb: 2.5 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.75 }}>Steps</Typography>
+                      {(Array.isArray(drawerTc.steps) ? drawerTc.steps : [drawerTc.steps]).map((step, i) => (
+                        <Box key={i} sx={{ display: 'flex', gap: 1.25, mb: 0.75 }}>
+                          <Box sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Typography sx={{ fontSize: 10, fontWeight: 800, color: '#64748b' }}>{i + 1}</Typography>
+                          </Box>
+                          <Typography sx={{ fontSize: 13, color: '#374151', lineHeight: 1.6, pt: 0.2 }}>{step}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                  {drawerTc.expected_result && (
+                    <Box sx={{ mb: 2.5 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.75 }}>Expected Result</Typography>
+                      <Box sx={{ bgcolor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', p: 1.5 }}>
+                        <Typography sx={{ fontSize: 13, color: '#15803d', lineHeight: 1.7 }}>{drawerTc.expected_result}</Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  <Divider sx={{ my: 2 }} />
+                  <Grid container spacing={2}>
+                    {[
+                      { label: 'Status', value: drawerTc.status || 'Draft' },
+                      { label: 'Priority', value: drawerTc.priority || '—' },
+                      { label: 'Type', value: drawerTc.field_values?.type || '—' },
+                      { label: 'Section', value: drawerTc.field_values?.section || '—' },
+                      { label: 'Assigned To', value: drawerTc.field_values?.assigned_to || 'Unassigned' },
+                      { label: 'Estimate', value: drawerTc.field_values?.estimate || '—' },
+                      { label: 'Automation', value: drawerTc.field_values?.automation_type || 'None' },
+                      { label: 'Is Automated', value: (drawerTc.field_values?.is_automated === true || drawerTc.field_values?.is_automated === 'true') ? 'Yes' : 'No' },
+                    ].map(item => (
+                      <Grid item xs={6} key={item.label}>
+                        <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.3 }}>{item.label}</Typography>
+                        <Typography sx={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{item.value}</Typography>
+                      </Grid>
+                    ))}
+                  </Grid>
+                  {drawerTc.field_values?.preconditions && (
+                    <Box sx={{ mt: 2.5 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.75 }}>Preconditions</Typography>
+                      <Typography sx={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{drawerTc.field_values.preconditions}</Typography>
+                    </Box>
+                  )}
+                  {drawerTc.field_values?.references && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.75 }}>References</Typography>
+                      <Typography sx={{ fontSize: 13, color: '#2563eb', lineHeight: 1.6 }}>{drawerTc.field_values.references}</Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+
+              {/* COMMENTS TAB */}
+              {drawerTab === 1 && (
+                <CommentThread entityType="test_case" entityId={drawerTc.id} />
+              )}
+
+              {/* ATTACHMENTS TAB */}
+              {drawerTab === 2 && (
+                <AttachmentPanel entityType="test_case" entityId={drawerTc.id} />
+              )}
+
+              {/* HISTORY TAB */}
+              {drawerTab === 3 && (
+                <VersionHistory testCaseId={drawerTc.id} onRestore={() => { loadTestCases(); }} />
+              )}
+
+              {/* DEFECTS TAB */}
+              {drawerTab === 4 && (
+                <Box>
+                  <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, color: '#64748b', mb: 2 }}>
+                    Linked Defects ({drawerDefects.length})
+                  </Typography>
+                  {drawerDefectsLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                      <CircularProgress size={24} sx={{ color: '#225038' }} />
+                    </Box>
+                  ) : drawerDefects.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 4, bgcolor: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>
+                      <BugReportOutlinedIcon sx={{ fontSize: 32, color: '#cbd5e1', mb: 1, display: 'block', mx: 'auto' }} />
+                      <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>No defects linked to this test case.</Typography>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      {drawerDefects.map(defect => {
+                        const sevColors = { critical: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#3b82f6' };
+                        const sevBgs = { critical: '#fee2e2', high: '#ffedd5', medium: '#fef9c3', low: '#dbeafe' };
+                        const stColors = { open: '#dc2626', in_progress: '#2563eb', resolved: '#16a34a', closed: '#64748b' };
+                        const stBgs = { open: '#fee2e2', in_progress: '#dbeafe', resolved: '#dcfce7', closed: '#f1f5f9' };
+                        return (
+                          <Box key={defect.id} sx={{ p: 2, borderRadius: '10px', border: '1px solid #e2e8f0', bgcolor: 'white', '&:hover': { borderColor: '#cbd5e1', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }, transition: 'all 0.15s' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.75 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#64748b', fontFamily: 'monospace' }}>DEF-{defect.id}</Typography>
+                                <Chip label={defect.severity} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, borderRadius: '5px', bgcolor: sevBgs[defect.severity] || '#f1f5f9', color: sevColors[defect.severity] || '#64748b', textTransform: 'capitalize' }} />
+                                <Chip label={defect.status?.replace('_', ' ')} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, borderRadius: '5px', bgcolor: stBgs[defect.status] || '#f1f5f9', color: stColors[defect.status] || '#64748b', textTransform: 'capitalize' }} />
+                              </Box>
+                              {defect.github_issue_url && (
+                                <Tooltip title="View GitHub Issue">
+                                  <IconButton size="small" component="a" href={defect.github_issue_url} target="_blank" rel="noopener"
+                                    sx={{ color: '#24292f', '&:hover': { bgcolor: '#f1f5f9' } }}>
+                                    <OpenInNewIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{defect.title}</Typography>
+                            {defect.assignee_name && (
+                              <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 0.5 }}>Assigned to {defect.assignee_name}</Typography>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+      </Drawer>
     </Box>
   );
 }

@@ -297,7 +297,17 @@ const getDashboardAnalytics = async (req, res) => {
        ORDER BY fail_count DESC LIMIT 5`, [workspaceId]
     );
 
-    // ── 14. AUTOMATION COVERAGE — per workspace (all projects) ───────────────
+    // ── 14. DEFECT COUNTS ────────────────────────────────────────────────────
+    const defectsQ = await safeQuery(pool,
+      `SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE status = 'open') AS open_defects,
+        COUNT(*) FILTER (WHERE severity = 'critical') AS critical_defects
+       FROM defects WHERE workspace_id = $1`, [workspaceId]
+    );
+    const defectRow = defectsQ.rows[0];
+
+    // ── 15. AUTOMATION COVERAGE — per workspace (all projects) ───────────────
     // Use JSONB containment @> to reliably match boolean true regardless of how it was stored
     const automationByProjectQ = await safeQuery(pool,
       `SELECT w.id, w.name,
@@ -353,6 +363,11 @@ const getDashboardAnalytics = async (req, res) => {
         typed: autoTyped,
         pct: autoTotal > 0 ? Math.round((autoCount / autoTotal) * 100) : 0,
         by_project: automationByProjectQ.rows,
+      },
+      defects: {
+        total:    parseInt(defectRow.total || 0, 10),
+        open:     parseInt(defectRow.open_defects || 0, 10),
+        critical: parseInt(defectRow.critical_defects || 0, 10),
       },
     });
   } catch (error) {

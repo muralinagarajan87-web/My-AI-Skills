@@ -223,6 +223,128 @@ const createTables = async () => {
       );
     }
 
+    // Defects table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS defects (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        description TEXT,
+        severity VARCHAR(50) DEFAULT 'medium',
+        status VARCHAR(50) DEFAULT 'open',
+        test_case_id INTEGER REFERENCES test_cases(id) ON DELETE SET NULL,
+        test_run_id INTEGER REFERENCES test_runs(id) ON DELETE SET NULL,
+        reporter_id INTEGER REFERENCES users(id),
+        assignee_id INTEGER REFERENCES users(id),
+        github_issue_number INTEGER,
+        github_issue_url VARCHAR(1000),
+        github_issue_state VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Attachments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        file_name VARCHAR(500) NOT NULL,
+        original_name VARCHAR(500),
+        file_type VARCHAR(100),
+        file_size INTEGER,
+        file_path VARCHAR(1000) NOT NULL,
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id INTEGER NOT NULL,
+        uploader_id INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Comments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        entity_type VARCHAR(50) NOT NULL,
+        entity_id INTEGER NOT NULL,
+        author_id INTEGER REFERENCES users(id),
+        mentions JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Environments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS environments (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        name VARCHAR(200) NOT NULL,
+        url VARCHAR(1000),
+        env_type VARCHAR(50) DEFAULT 'custom',
+        description TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Add environment_id to test_runs
+    await pool.query("ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS environment_id INTEGER REFERENCES environments(id) ON DELETE SET NULL;");
+
+    // Integrations table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS integrations (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        type VARCHAR(100) NOT NULL,
+        name VARCHAR(200),
+        config JSONB NOT NULL DEFAULT '{}',
+        is_enabled BOOLEAN DEFAULT TRUE,
+        webhook_token VARCHAR(200),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Requirements table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS requirements (
+        id SERIAL PRIMARY KEY,
+        workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+        title VARCHAR(500) NOT NULL,
+        description TEXT,
+        ref_id VARCHAR(100),
+        priority VARCHAR(50) DEFAULT 'medium',
+        status VARCHAR(50) DEFAULT 'active',
+        source VARCHAR(50) DEFAULT 'manual',
+        external_url VARCHAR(1000),
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Requirement <-> Test Case linking
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS requirement_test_cases (
+        requirement_id INTEGER REFERENCES requirements(id) ON DELETE CASCADE,
+        test_case_id INTEGER REFERENCES test_cases(id) ON DELETE CASCADE,
+        linked_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (requirement_id, test_case_id)
+      );
+    `);
+
+    // New indexes
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_defects_workspace ON defects(workspace_id);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_requirements_workspace ON requirements(workspace_id);');
+
     console.log('✓ All tables created successfully');
   } catch (error) {
     console.error('Error creating tables:', error);

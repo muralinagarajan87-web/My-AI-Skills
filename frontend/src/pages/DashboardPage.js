@@ -21,7 +21,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
-import { reportAPI, testRunAPI, templateAPI, workspaceAPI, uploadAPI } from '../services/api';
+import { reportAPI, testRunAPI, templateAPI, workspaceAPI, uploadAPI, defectAPI } from '../services/api';
 import UploadMappingDialog from '../components/UploadMappingDialog';
 
 /* ─── Shared card styles ──────────────────────────────────────────── */
@@ -218,8 +218,9 @@ export default function DashboardPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [defectStats, setDefectStats] = useState({ total: 0, open: 0, critical: 0 });
 
-  useEffect(() => { loadWorkspace(); loadTemplates(); loadTestRuns(); loadProjects(); }, []);
+  useEffect(() => { loadWorkspace(); loadTemplates(); loadTestRuns(); loadProjects(); loadDefectStats(); }, []);
   useEffect(() => { loadMetrics(selectedRunId || null, selectedProjectId || null); loadDashboard(selectedProjectId || null); }, [selectedRunId, selectedProjectId]);
 
   const loadWorkspace = async () => {
@@ -235,6 +236,12 @@ export default function DashboardPage() {
   const loadMetrics = async (runId, projectId) => { try { const r = await reportAPI.getMetrics(runId, projectId); setMetrics(r.data); } catch (e) { console.error(e); } };
   const loadTestRuns = async () => { try { const r = await testRunAPI.getAll(); setTestRuns(r.data); } catch (e) { console.error(e); } };
   const loadDashboard = async (projectId) => { try { const r = await reportAPI.getDashboard(projectId); setDashboard(r.data); } catch (e) { console.error(e); } };
+  const loadDefectStats = async () => {
+    try {
+      const r = await defectAPI.getStats();
+      setDefectStats(r.data || { total: 0, open: 0, critical: 0 });
+    } catch (e) { /* endpoint may not exist yet — fall back to zeros */ }
+  };
   const refreshAutomation = async () => {
     try {
       const r = await reportAPI.getAutomation();
@@ -288,6 +295,9 @@ export default function DashboardPage() {
     { label: 'Skipped', value: skipped, color: '#d97706', bgColor: '#fef3c7', icon: <RemoveCircleOutlineIcon />, sub: executed > 0 ? `${Math.round((skipped/executed)*100)}% of executed` : 'no results' },
     { label: 'Test Runs', value: metrics.total_runs, color: '#2563eb', bgColor: '#dbeafe', icon: <PlayCircleOutlineIcon />, sub: `${metrics.completed_runs || 0} completed` },
     { label: 'Pass Rate', value: `${passRate}%`, color: passRate >= 80 ? '#16a34a' : passRate >= 50 ? '#d97706' : '#dc2626', bgColor: passRate >= 80 ? '#dcfce7' : passRate >= 50 ? '#fef3c7' : '#fee2e2', icon: <TrendingUpIcon />, sub: executed > 0 ? `${executed} executed` : 'no executions yet' },
+    { label: 'Defects', value: defectStats.total, color: '#7c3aed', bgColor: '#f3e8ff', icon: <BugReportOutlinedIcon />, sub: 'total tracked' },
+    { label: 'Open Bugs', value: defectStats.open, color: '#dc2626', bgColor: '#fee2e2', icon: <BugReportOutlinedIcon />, sub: 'needs attention' },
+    { label: 'Critical', value: defectStats.critical, color: '#ef4444', bgColor: '#fee2e2', icon: <WarningAmberIcon />, sub: 'critical severity' },
   ];
 
   return (
@@ -420,7 +430,7 @@ export default function DashboardPage() {
         {/* ── ROW 1: STAT CARDS ──────────────────────────────────── */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
           {statCards.map(c => (
-            <Grid item xs={6} sm={4} md={2} key={c.label}><StatCard {...c} /></Grid>
+            <Grid item xs={6} sm={4} md={2} lg={1.33} key={c.label}><StatCard {...c} /></Grid>
           ))}
         </Grid>
 

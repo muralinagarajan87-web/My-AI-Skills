@@ -15,6 +15,8 @@ import SettingsPage from './pages/SettingsPage';
 import UsersPage from './pages/UsersPage';
 import MilestonesPage from './pages/MilestonesPage';
 import MilestonePage from './pages/MilestonePage';
+import DefectsPage from './pages/DefectsPage';
+import RequirementsPage from './pages/RequirementsPage';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -28,8 +30,10 @@ const NAV_LINKS = [
   { label: 'Test Runs',  href: '/test-runs'   },
   { label: 'Templates',  href: '/templates'   },
   { label: 'Projects',   href: '/projects'    },
-  { label: 'Milestones', href: '/milestones'  },
-  { label: 'Settings',   href: '/settings'    },
+  { label: 'Milestones',    href: '/milestones'     },
+  { label: 'Defects',      href: '/defects'        },
+  { label: 'Requirements', href: '/requirements'   },
+  { label: 'Settings',     href: '/settings'       },
   { label: 'Users',      href: '/users'       },
 ];
 
@@ -216,8 +220,10 @@ export default function App() {
           <Route path="/test-run/:id" element={<ProtectedRoute><TestRunPage /></ProtectedRoute>} />
           <Route path="/settings"    element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/users"       element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-          <Route path="/milestones"  element={<ProtectedRoute><MilestonesPage /></ProtectedRoute>} />
+          <Route path="/milestones"    element={<ProtectedRoute><MilestonesPage /></ProtectedRoute>} />
           <Route path="/milestone/:id" element={<ProtectedRoute><MilestonePage /></ProtectedRoute>} />
+          <Route path="/defects"       element={<ProtectedRoute><DefectsPage /></ProtectedRoute>} />
+          <Route path="/requirements"  element={<ProtectedRoute><RequirementsPage /></ProtectedRoute>} />
           <Route path="/"            element={<Navigate to="/dashboard" />} />
         </Routes>
       </Box>

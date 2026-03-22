@@ -13,6 +13,13 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const userRoutes = require('./routes/userRoutes');
 const milestoneRoutes = require('./routes/milestoneRoutes');
+const aiRoutes = require('./routes/aiRoutes');
+const defectRoutes = require('./routes/defectRoutes');
+const attachmentRoutes = require('./routes/attachmentRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+const environmentRoutes = require('./routes/environmentRoutes');
+const integrationRoutes = require('./routes/integrationRoutes');
+const requirementRoutes = require('./routes/requirementRoutes');
 
 const app = express();
 
@@ -36,6 +43,13 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/milestones', milestoneRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/defects', defectRoutes);
+app.use('/api/attachments', attachmentRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/environments', environmentRoutes);
+app.use('/api/integrations', integrationRoutes);
+app.use('/api/requirements', requirementRoutes);
 
 // Test database connection
 app.get('/api/db-check', async (req, res) => {
