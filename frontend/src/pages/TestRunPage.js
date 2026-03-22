@@ -5,7 +5,7 @@ import {
   IconButton, Tooltip, Alert, Stack, Avatar, Dialog,
   DialogTitle, DialogContent, DialogActions, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, CircularProgress,
-  Stepper, Step, StepLabel, StepContent
+  Stepper, Step, StepLabel, StepContent, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -16,7 +16,7 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import BugReportIcon from '@mui/icons-material/BugReport';
-import { testRunAPI } from '../services/api';
+import { testRunAPI, defectAPI } from '../services/api';
 
 const STATUS_COLOR = {
   Pass: { bg: '#dcfce7', color: '#166534', border: '#86efac' },
@@ -51,6 +51,11 @@ export default function TestRunPage() {
   const [saving, setSaving] = useState(false);
   const [showBugDialog, setShowBugDialog] = useState(false);
   const [bugNote, setBugNote] = useState('');
+  const [autoDefect, setAutoDefect] = useState(null); // defect created after Fail
+  const [jiraDialogOpen, setJiraDialogOpen] = useState(false);
+  const [jiraForm, setJiraForm] = useState({ summary: '', epic_key: '', priority: 'High' });
+  const [jiraRaising, setJiraRaising] = useState(false);
+  const [jiraResult, setJiraResult] = useState(null); // { key, url } after success
 
   const load = async () => {
     try {
@@ -103,10 +108,19 @@ export default function TestRunPage() {
     const current = results[currentIdx];
     if (!current) return;
     setSaving(true);
+    setAutoDefect(null);
+    setJiraResult(null);
     try {
-      await testRunAPI.updateResult(current.id, { result_status: status, comments });
+      const resp = await testRunAPI.updateResult(current.id, { result_status: status, comments });
       await load();
       setComments('');
+
+      // If fail, show auto-defect banner
+      if (status === 'Fail' && resp.data?.auto_defect) {
+        const def = resp.data.auto_defect;
+        setAutoDefect(def);
+        setJiraForm({ summary: def.title, epic_key: '', priority: 'High' });
+      }
 
       // Auto-advance to next pending
       const updatedResults = testRun.results || [];
@@ -124,6 +138,24 @@ export default function TestRunPage() {
       console.error(err);
     }
     setSaving(false);
+  };
+
+  const handleRaiseJira = async () => {
+    if (!autoDefect) return;
+    setJiraRaising(true);
+    setJiraResult(null);
+    try {
+      const resp = await defectAPI.raiseJira(autoDefect.id, {
+        summary: jiraForm.summary,
+        epic_key: jiraForm.epic_key || undefined,
+        priority: jiraForm.priority,
+      });
+      setJiraResult({ key: resp.data.jira_key, url: resp.data.jira_url });
+      setJiraDialogOpen(false);
+    } catch (err) {
+      setJiraResult({ error: err.response?.data?.error || 'Failed to create Jira issue' });
+    }
+    setJiraRaising(false);
   };
 
   const handleNav = (dir) => {
@@ -364,6 +396,116 @@ export default function TestRunPage() {
             </Box>
           </Paper>
         </Box>
+
+        {/* Auto-defect banner */}
+        {autoDefect && (
+          <Box sx={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 1300, minWidth: 420, maxWidth: 600,
+          }}>
+            <Paper elevation={6} sx={{
+              borderRadius: '14px', overflow: 'hidden',
+              border: '1.5px solid #fca5a5',
+              boxShadow: '0 8px 32px rgba(220,38,38,0.15)'
+            }}>
+              <Box sx={{ bgcolor: '#fee2e2', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <BugReportIcon sx={{ color: '#dc2626', fontSize: 20 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#991b1b' }}>
+                    Defect auto-created: DEF-{autoDefect.id}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: '#b91c1c', mt: 0.25 }} noWrap>
+                    {autoDefect.title}
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    size="small" variant="contained"
+                    onClick={() => setJiraDialogOpen(true)}
+                    sx={{
+                      bgcolor: '#0052cc', fontSize: 12, fontWeight: 700, borderRadius: '8px',
+                      textTransform: 'none', whiteSpace: 'nowrap',
+                      '&:hover': { bgcolor: '#0040a8' }
+                    }}
+                  >
+                    Raise in Jira
+                  </Button>
+                  <IconButton size="small" onClick={() => setAutoDefect(null)} sx={{ color: '#991b1b' }}>
+                    ✕
+                  </IconButton>
+                </Stack>
+              </Box>
+              {jiraResult?.key && (
+                <Box sx={{ bgcolor: '#f0fdf4', px: 2.5, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssignmentTurnedInIcon sx={{ color: '#16a34a', fontSize: 16 }} />
+                  <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>
+                    Jira issue created:&nbsp;
+                    <a href={jiraResult.url} target="_blank" rel="noopener noreferrer" style={{ color: '#0052cc' }}>
+                      {jiraResult.key}
+                    </a>
+                  </Typography>
+                </Box>
+              )}
+              {jiraResult?.error && (
+                <Box sx={{ bgcolor: '#fff7ed', px: 2.5, py: 1 }}>
+                  <Typography sx={{ fontSize: 12, color: '#c2410c' }}>{jiraResult.error}</Typography>
+                </Box>
+              )}
+            </Paper>
+          </Box>
+        )}
+
+        {/* Raise in Jira dialog */}
+        <Dialog open={jiraDialogOpen} onClose={() => setJiraDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+          <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <BugReportIcon sx={{ color: '#0052cc', fontSize: 22 }} />
+              <Typography variant="h6" fontWeight={700}>Raise in Jira</Typography>
+            </Box>
+            <IconButton size="small" onClick={() => setJiraDialogOpen(false)}>✕</IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            <TextField
+              fullWidth label="Issue Summary" value={jiraForm.summary}
+              onChange={e => setJiraForm(p => ({ ...p, summary: e.target.value }))}
+              sx={{ mb: 2.5, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+            />
+            <TextField
+              fullWidth label="EPIC Key (optional)" value={jiraForm.epic_key}
+              onChange={e => setJiraForm(p => ({ ...p, epic_key: e.target.value }))}
+              placeholder="e.g. PROJ-42 (overrides default EPIC from Settings)"
+              sx={{ mb: 2.5, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+            />
+            <FormControl fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}>
+              <InputLabel>Priority</InputLabel>
+              <Select
+                label="Priority"
+                value={jiraForm.priority}
+                onChange={e => setJiraForm(p => ({ ...p, priority: e.target.value }))}
+              >
+                <MenuItem value="Highest">Highest</MenuItem>
+                <MenuItem value="High">High</MenuItem>
+                <MenuItem value="Medium">Medium</MenuItem>
+                <MenuItem value="Low">Low</MenuItem>
+                <MenuItem value="Lowest">Lowest</MenuItem>
+              </Select>
+            </FormControl>
+            {jiraResult?.error && (
+              <Alert severity="error" sx={{ mt: 2, borderRadius: '10px' }}>{jiraResult.error}</Alert>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ borderTop: '1px solid #e2e8f0', px: 3, py: 2, gap: 1 }}>
+            <Button onClick={() => setJiraDialogOpen(false)} sx={{ textTransform: 'none', color: '#64748b' }}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleRaiseJira}
+              disabled={jiraRaising || !jiraForm.summary}
+              sx={{ bgcolor: '#0052cc', borderRadius: '10px', fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#0040a8' } }}
+            >
+              {jiraRaising ? 'Creating...' : 'Create Jira Issue'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Bug dialog */}
         <Dialog open={showBugDialog} onClose={() => setShowBugDialog(false)} maxWidth="sm" fullWidth>

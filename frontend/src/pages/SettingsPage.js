@@ -18,6 +18,7 @@ import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import { userAPI, environmentAPI, integrationAPI } from '../services/api';
 
 const ENV_TYPE_STYLES = {
@@ -231,6 +232,14 @@ function IntegrationsTab() {
       setForm({ token: existing?.config?.token || '', owner: existing?.config?.owner || '', repo: existing?.config?.repo || '' });
     } else if (type === 'slack') {
       setForm({ webhook_url: existing?.config?.webhook_url || '' });
+    } else if (type === 'jira') {
+      setForm({
+        domain: existing?.config?.domain || '',
+        email: existing?.config?.email || '',
+        api_token: existing?.config?.api_token ? '***' : '',
+        project_key: existing?.config?.project_key || '',
+        default_epic: existing?.config?.default_epic || '',
+      });
     } else {
       setForm({});
     }
@@ -300,6 +309,13 @@ function IntegrationsTab() {
       name: 'GitHub Actions',
       desc: 'Trigger test result imports from your CI/CD pipeline automatically.',
       fields: [],
+    },
+    {
+      key: 'jira',
+      icon: <BugReportOutlinedIcon sx={{ fontSize: 32, color: '#0052cc' }} />,
+      name: 'Jira',
+      desc: 'One-click raise bugs in Jira boards and EPICs directly from failed test runs.',
+      fields: ['domain', 'email', 'api_token', 'project_key', 'default_epic'],
     },
   ];
 
@@ -475,6 +491,70 @@ function IntegrationsTab() {
         </DialogContent>
         <DialogActions sx={{ borderTop: '1px solid #e2e8f0', px: 3, py: 2 }}>
           <Button onClick={() => setConfigOpen(null)} variant="outlined" sx={{ borderRadius: '10px' }}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Jira */}
+      <Dialog open={configOpen === 'jira'} onClose={() => setConfigOpen(null)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <BugReportOutlinedIcon sx={{ fontSize: 22, color: '#0052cc' }} />
+            <Typography variant="h6" fontWeight={700}>Jira Configuration</Typography>
+          </Box>
+          <IconButton size="small" onClick={() => setConfigOpen(null)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <TextField
+            fullWidth label="Jira Domain" value={form.domain || ''}
+            onChange={e => setForm(p => ({ ...p, domain: e.target.value }))}
+            placeholder="yourcompany.atlassian.net"
+            helperText="Your Atlassian domain (without https://)"
+            sx={{ mb: 2.5, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+          />
+          <TextField
+            fullWidth label="Atlassian Account Email" value={form.email || ''}
+            onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+            placeholder="you@company.com"
+            sx={{ mb: 2.5, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+          />
+          <TextField
+            fullWidth label="API Token" type={showToken ? 'text' : 'password'} value={form.api_token || ''}
+            onChange={e => setForm(p => ({ ...p, api_token: e.target.value }))}
+            placeholder="Enter your Atlassian API token"
+            helperText="Generate at id.atlassian.com/manage-profile/security/api-tokens"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowToken(!showToken)}>
+                    {showToken ? <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} /> : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+            sx={{ mb: 2.5, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
+          />
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <TextField fullWidth label="Project Key" value={form.project_key || ''} onChange={e => setForm(p => ({ ...p, project_key: e.target.value }))}
+                placeholder="e.g. QA or PROJ" sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField fullWidth label="Default EPIC (optional)" value={form.default_epic || ''} onChange={e => setForm(p => ({ ...p, default_epic: e.target.value }))}
+                placeholder="e.g. PROJ-42" helperText="EPIC key to link new issues"
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+            </Grid>
+          </Grid>
+          {testResult && (
+            <Alert severity={testResult.success ? 'success' : 'error'} sx={{ mt: 2.5, borderRadius: '10px' }}>
+              {testResult.message}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #e2e8f0', px: 3, py: 2, gap: 1 }}>
+          <Button onClick={handleSave} variant="contained" disabled={saving}
+            sx={{ bgcolor: '#0052cc', borderRadius: '10px', fontWeight: 700, '&:hover': { bgcolor: '#0040a8' } }}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
         </DialogActions>
       </Dialog>
 

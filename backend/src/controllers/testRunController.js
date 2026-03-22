@@ -163,7 +163,36 @@ const updateTestResult = async (req, res) => {
       [workspaceId, userId, 'UPDATE', 'TEST_RESULT', id, JSON.stringify(updatedResult)]
     );
 
-    res.json({ message: 'Test result updated', result: updatedResult });
+    // Auto-create defect when result is Fail
+    let autoDefect = null;
+    if (result_status === 'Fail') {
+      // Fetch test case title for the defect
+      const tcRow = await pool.query(
+        `SELECT tc.title, tc.id as tc_id
+         FROM test_results tr
+         JOIN test_cases tc ON tr.test_case_id = tc.id
+         WHERE tr.id = $1`,
+        [id]
+      );
+      const tcTitle = tcRow.rows[0]?.title || 'Unknown Test Case';
+      const tcId = tcRow.rows[0]?.tc_id || null;
+
+      const defectTitle = `[Auto] Failure in: ${tcTitle}`;
+      const defectDesc = comments
+        ? `Test case failed during test run execution.\n\nNotes: ${comments}`
+        : `Test case failed during test run execution.`;
+
+      const defectInsert = await pool.query(
+        `INSERT INTO defects
+          (workspace_id, title, description, severity, status, test_case_id, test_run_id, reporter_id)
+         VALUES ($1, $2, $3, 'high', 'open', $4, $5, $6)
+         RETURNING *`,
+        [workspaceId, defectTitle, defectDesc, tcId, testRunId, userId]
+      );
+      autoDefect = defectInsert.rows[0];
+    }
+
+    res.json({ message: 'Test result updated', result: updatedResult, auto_defect: autoDefect });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

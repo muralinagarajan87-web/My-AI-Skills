@@ -160,6 +160,7 @@ export const defectAPI = {
   update: (id, data) => api.put(`/defects/${id}`, data),
   delete: (id) => api.delete(`/defects/${id}`),
   syncGitHub: (id) => api.post(`/defects/${id}/sync-github`),
+  raiseJira: (id, data) => api.post(`/defects/${id}/raise-jira`, data),
   getStats: () => api.get('/defects/stats'),
 };
 

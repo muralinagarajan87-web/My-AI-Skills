@@ -339,6 +339,10 @@ const createTables = async () => {
       );
     `);
 
+    // Add Jira columns to defects (idempotent)
+    await pool.query(`ALTER TABLE defects ADD COLUMN IF NOT EXISTS jira_issue_key VARCHAR(50);`);
+    await pool.query(`ALTER TABLE defects ADD COLUMN IF NOT EXISTS jira_issue_url TEXT;`);
+
     // New indexes
     await pool.query('CREATE INDEX IF NOT EXISTS idx_defects_workspace ON defects(workspace_id);');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id);');

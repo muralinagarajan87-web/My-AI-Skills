@@ -6,6 +6,7 @@ const {
   updateDefect,
   deleteDefect,
   syncGitHub,
+  raiseJira,
   getDefectStats,
 } = require('../controllers/defectController');
 const { authenticateToken } = require('../middleware/auth');
@@ -19,5 +20,6 @@ router.get('/:id', authenticateToken, getDefect);
 router.put('/:id', authenticateToken, updateDefect);
 router.delete('/:id', authenticateToken, deleteDefect);
 router.post('/:id/sync-github', authenticateToken, syncGitHub);
+router.post('/:id/raise-jira', authenticateToken, raiseJira);
 
 module.exports = router;
