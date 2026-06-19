@@ -1,4 +1,4 @@
-# Flywl — Test Case Management Tool
+#  — Test Case Management Tool
 
 A comprehensive TestRail-style test case management tool built with React, Node.js, and PostgreSQL. Built for QA teams to manage test cases, execute test runs, track milestones, and analyse quality metrics.
 
